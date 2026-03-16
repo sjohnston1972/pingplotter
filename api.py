@@ -301,15 +301,6 @@ def get_baseline_stats(device_id: int):
 
 # ── Compare endpoint ───────────────────────────────────────────────────────────
 
-@app.get("/api/compare")
-def get_compare(ids: str = "", hours: int = 1):
-    """Return time-series latency for multiple devices. ids=1,2,3"""
-    id_list = [int(x) for x in ids.split(",") if x.strip().isdigit()]
-    result = {}
-    for device_id in id_list:
-        result[device_id] = storage.load_results(device_id, hours)
-    return result
-
 
 # ── DNS reverse lookup endpoint ────────────────────────────────────────────────
 

@@ -176,10 +176,7 @@
     .heatmap-cell{height:13px;border-radius:2px;cursor:default}
     .incident-row-ok{background:rgba(16,185,129,.06)}
     .mtu-result{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;margin-top:6px}
-    .compare-device-list{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
-    .compare-check-label{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 12px;transition:all .15s}
-    .compare-check-label:hover{border-color:#475569}
-    .compare-check-label input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px}
+
     /* Sidebar search */
     .sidebar-search{padding:8px 14px 4px;border-bottom:1px solid var(--border)}
     .sidebar-search input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:5px 9px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none}
@@ -223,7 +220,7 @@
   <div class="logo"><div class="logo-icon">◆</div>PingPlotter</div>
   <nav>
     <button class="nav-tab active" onclick="switchTab('monitor')">Monitor</button>
-    <button class="nav-tab" onclick="switchTab('compare')">Compare</button>
+
     <button class="nav-tab" onclick="switchTab('map')">Map</button>
     <button class="nav-tab" onclick="switchTab('topology')">Topology</button>
     <button class="nav-tab" onclick="switchTab('speedtest')">Speedtest</button>
@@ -255,25 +252,6 @@
   </main>
 </div>
 
-<div class="scroll-page-wrap" id="page-compare">
-  <div class="scroll-page">
-    <div class="page-heading"><h1>Compare</h1><p>Overlay multiple devices on a single latency chart.</p></div>
-    <div id="compare-device-list" class="compare-device-list"></div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-      <label style="font-size:12px;color:var(--muted)">Time range:</label>
-      <select class="ctrl-select" id="compare-hours">
-        <option value="1">Last 1h</option>
-        <option value="6">Last 6h</option>
-        <option value="24" selected>Last 24h</option>
-      </select>
-      <button class="btn-run" onclick="loadCompare()">Compare</button>
-    </div>
-    <div class="chart-card">
-      <div class="chart-label">Latency Comparison</div>
-      <div class="chart-wrap" style="height:300px"><canvas id="chart-compare"></canvas></div>
-    </div>
-  </div>
-</div>
 
 <div class="scroll-page-wrap" id="page-map">
   <div style="flex:1;display:flex;flex-direction:column">
@@ -645,7 +623,7 @@ function initSSE() {
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-const TABS = ["monitor", "compare", "map", "topology", "speedtest", "reports", "settings"];
+const TABS = ["monitor", "map", "topology", "speedtest", "reports", "settings"];
 function switchTab(tab) {
   TABS.forEach((t, i) => {
     const page = document.getElementById("page-" + t);
@@ -657,7 +635,7 @@ function switchTab(tab) {
     }
     navBtn.classList.toggle("active", t === tab);
   });
-  if (tab === "compare") renderCompareDeviceList();
+
   if (tab === "map") { loadMap(); setTimeout(() => leafletMap && leafletMap.invalidateSize(), 100); }
   if (tab === "topology") loadTopology();
   if (tab === "speedtest") loadSpeedtest();
@@ -1360,68 +1338,6 @@ async function resolveIp(ip, btn) {
   } catch(e) { btn.textContent = "err"; btn.disabled = false; }
 }
 
-// ── Compare tab ───────────────────────────────────────────────────────────────
-function renderCompareDeviceList() {
-  const el = document.getElementById("compare-device-list");
-  if (!devices.length) { el.innerHTML = `<p style="color:var(--muted);font-size:13px">No devices to compare.</p>`; return; }
-  el.innerHTML = devices.map((d, i) =>
-    `<label class="compare-check-label" style="border-left:3px solid ${PALETTE[i % PALETTE.length]}">
-      <input type="checkbox" class="compare-check" value="${d.id}" />
-      <span>${esc(d.name)}</span>
-      <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${esc(d.host)}</span>
-    </label>`
-  ).join("");
-}
-
-async function loadCompare() {
-  const checks = [...document.querySelectorAll(".compare-check:checked")].map(c => c.value);
-  if (!checks.length) { toast("Select at least one device.", "error"); return; }
-  const hours = parseInt(document.getElementById("compare-hours").value);
-  try {
-    const data = await api("/compare?ids=" + checks.join(",") + "&hours=" + hours);
-    renderCompareChart(data, checks, hours);
-  } catch(e) { toast("Compare failed: " + e.message, "error"); }
-}
-
-function renderCompareChart(data, deviceIds, hours) {
-  if (charts.compare) { charts.compare.destroy(); delete charts.compare; }
-  const N = 120;
-  // Build a unified sorted timestamp list from all devices
-  const allTs = [...new Set(deviceIds.flatMap(id => (data[id] || []).map(r => r.timestamp)))].sort();
-  const labels = allTs.length <= N
-    ? allTs
-    : Array.from({length: N}, (_, j) => allTs[Math.floor(j * allTs.length / N)]);
-  const labelSet = new Set(labels);
-  const datasets = deviceIds.map((id, i) => {
-    const d = devices.find(dv => dv.id == id);
-    const rows = (data[id] || []).filter(r => labelSet.has(r.timestamp));
-    const byTs = Object.fromEntries(rows.map(r => [r.timestamp, r.latency_ms]));
-    return {
-      label: d ? d.name : "Device " + id,
-      data: labels.map(ts => byTs[ts] ?? null),
-      borderColor: PALETTE[i % PALETTE.length],
-      backgroundColor: "transparent",
-      borderWidth: 1.5,
-      pointRadius: 0,
-      tension: 0.3,
-      spanGaps: true,
-    };
-  });
-  const ctx = document.getElementById("chart-compare");
-  if (!ctx) return;
-  charts.compare = new Chart(ctx, {
-    type: "line",
-    data: { labels: labels.map(ts => ts.slice(11, 16)), datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false, animation: false,
-      plugins: { legend: { display: true, labels: { color: "#e2e8f0", font: { family: "IBM Plex Mono", size: 11 } } }, tooltip: { mode: "index", intersect: false } },
-      scales: {
-        x: { ticks: { color: "#64748b", maxTicksLimit: 10, font: { family: "IBM Plex Mono", size: 10 } }, grid: { color: "#1c2030" } },
-        y: { ticks: { color: "#64748b", font: { family: "IBM Plex Mono", size: 10 } }, grid: { color: "#1c2030" }, title: { display: true, text: "ms", color: "#64748b", font: { size: 10 } } }
-      }
-    }
-  });
-}
 
 // ── Map ───────────────────────────────────────────────────────────────────────
 let leafletMap = null;
