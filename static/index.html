@@ -1661,37 +1661,119 @@ function renderTopologyGraph(container, nodes, edges, deviceCount) {
 }
 
 // ── Speedtest ─────────────────────────────────────────────────────────────────
+let _stRunning = false;
+let _stScanRaf = null;
+
 async function loadSpeedtest() {
   const hours = parseInt(document.getElementById("speedtest-hours")?.value || 168);
   const results = await api("/speedtest/results?hours=" + hours);
   renderSpeedtestCharts(results);
-  renderSpeedtestStats(results);
+  renderSpeedtestGauges(results);
   renderSpeedtestHistory(results);
 }
 
-async function runSpeedtest() {
-  toast("Running speedtest — this may take 30-60 seconds...");
-  try {
-    const result = await api("/speedtest/run", "POST");
-    if (result.error) { toast("Speedtest failed: " + result.error, "error"); return; }
-    toast(`↓${result.download_mbps} Mbps  ↑${result.upload_mbps} Mbps  ping:${result.ping_ms}ms`);
-    loadSpeedtest();
-  } catch(e) { toast("Speedtest failed: " + e.message, "error"); }
+// ── Gauge utilities ────────────────────────────────────────────────────────────
+
+function _setGaugeNeedle(which, value, max) {
+  const pct = Math.min(Math.max(value / max, 0), 1);
+  const a = (-90 + pct * 180) * Math.PI / 180;
+  const x2 = (100 + 72 * Math.sin(a)).toFixed(1);
+  const y2 = (115 - 72 * Math.cos(a)).toFixed(1);
+  const needle = document.getElementById("gauge-" + which + "-needle");
+  const hub    = document.getElementById("gauge-" + which + "-hub");
+  const valEl  = document.getElementById("gauge-" + which + "-val");
+  if (!needle) return;
+  needle.setAttribute("x2", x2);
+  needle.setAttribute("y2", y2);
+  const zoneColor = pct < 0.25 ? "#ef4444" : pct < 0.60 ? "#f59e0b" : (which === "dl" ? "#3b82f6" : "#10b981");
+  if (hub) hub.setAttribute("fill", zoneColor);
+  if (valEl) valEl.textContent = Number.isInteger(value) ? value : value.toFixed(1);
 }
 
-function renderSpeedtestStats(results) {
-  const el = document.getElementById("speedtest-stats");
-  if (!el) return;
-  if (!results.length) { el.innerHTML = `<div class="no-data" style="grid-column:1/-1">No speedtest data yet. Click "Run Now".</div>`; return; }
+function _animateGauge(which, from, to, max, duration) {
+  const startTime = performance.now();
+  const ease = t => 1 - Math.pow(1 - t, 3); // ease-out cubic
+  function frame(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    _setGaugeNeedle(which, from + (to - from) * ease(t), max);
+    if (t < 1) { requestAnimationFrame(frame); }
+    else { _gaugeOnLand(which, to, max); }
+  }
+  requestAnimationFrame(frame);
+}
+
+function _gaugeOnLand(which, value, max) {
+  const hub = document.getElementById("gauge-" + which + "-hub");
+  if (!hub) return;
+  const pct = Math.min(Math.max(value / max, 0), 1);
+  const color = pct < 0.25 ? "#ef4444" : pct < 0.60 ? "#f59e0b" : (which === "dl" ? "#3b82f6" : "#10b981");
+  hub.setAttribute("r", "8");
+  hub.style.filter = `drop-shadow(0 0 8px ${color})`;
+  setTimeout(() => { hub.setAttribute("r", "6"); hub.style.filter = ""; }, 300);
+}
+
+function _startGaugeScan() {
+  const t0 = performance.now();
+  function frame(now) {
+    if (!_stRunning) return;
+    const pct = 0.10 + 0.30 * (0.5 + 0.5 * Math.sin(((now - t0) / 2500) * Math.PI * 2));
+    _setGaugeNeedle("dl", pct * 1000, 1000);
+    _setGaugeNeedle("ul", pct * 500, 500);
+    _stScanRaf = requestAnimationFrame(frame);
+  }
+  _stScanRaf = requestAnimationFrame(frame);
+}
+
+function _updateGaugeCentre(ping, isp, server) {
+  const pingEl  = document.getElementById("gauge-ping");
+  const ispEl   = document.getElementById("gauge-isp");
+  const srvEl   = document.getElementById("gauge-server");
+  if (pingEl)  pingEl.textContent  = ping  ?? "—";
+  if (ispEl)   ispEl.textContent   = isp   || "—";
+  if (srvEl)   srvEl.textContent   = server ? (server.length > 22 ? server.slice(0, 22) + "…" : server) : "—";
+}
+
+// ── Gauge render / run ─────────────────────────────────────────────────────────
+
+function renderSpeedtestGauges(results) {
+  if (!results.length) {
+    _setGaugeNeedle("dl", 0, 1000);
+    _setGaugeNeedle("ul", 0, 500);
+    _updateGaugeCentre(null, null, null);
+    return;
+  }
   const last = results[results.length - 1];
-  const avgDl = (results.reduce((a,r) => a + r.download_mbps, 0) / results.length).toFixed(1);
-  const avgUl = (results.reduce((a,r) => a + r.upload_mbps, 0) / results.length).toFixed(1);
-  el.innerHTML = [
-    ["Last Download", last.download_mbps + " Mbps"],
-    ["Last Upload", last.upload_mbps + " Mbps"],
-    ["Avg Download", avgDl + " Mbps"],
-    ["ISP", last.isp || "—"],
-  ].map(([label, val]) => `<div class="stat-card"><label>${label}</label><div class="value" style="font-size:18px">${val}</div></div>`).join("");
+  _setGaugeNeedle("dl", last.download_mbps, 1000);
+  _setGaugeNeedle("ul", last.upload_mbps, 500);
+  _updateGaugeCentre(last.ping_ms, last.isp, last.server);
+}
+
+async function runSpeedtest() {
+  if (_stRunning) return;
+  const btn = document.getElementById("st-run-btn");
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="st-spinner"></span>Testing…'; }
+  _stRunning = true;
+  _startGaugeScan();
+  try {
+    const result = await api("/speedtest/run", "POST");
+    _stRunning = false;
+    cancelAnimationFrame(_stScanRaf);
+    if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
+    if (result.error) { toast("Speedtest failed: " + result.error, "error"); return; }
+    // Snap to zero then sweep to result
+    _setGaugeNeedle("dl", 0, 1000);
+    _setGaugeNeedle("ul", 0, 500);
+    _animateGauge("dl", 0, result.download_mbps, 1000, 1200);
+    _animateGauge("ul", 0, result.upload_mbps,   500,  1200);
+    _updateGaugeCentre(result.ping_ms, result.isp, result.server);
+    toast(`↓${result.download_mbps} Mbps  ↑${result.upload_mbps} Mbps  ping:${result.ping_ms}ms`);
+    loadSpeedtest();
+  } catch(e) {
+    _stRunning = false;
+    cancelAnimationFrame(_stScanRaf);
+    if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
+    toast("Speedtest failed: " + e.message, "error");
+  }
 }
 
 function renderSpeedtestCharts(results) {
