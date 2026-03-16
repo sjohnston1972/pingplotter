@@ -1729,7 +1729,7 @@ function _updateGaugeCentre(ping, isp, server) {
   const ispEl   = document.getElementById("gauge-isp");
   const srvEl   = document.getElementById("gauge-server");
   if (pingEl)  pingEl.textContent  = ping  ?? "—";
-  if (ispEl)   ispEl.textContent   = isp   || "—";
+  if (ispEl)   ispEl.textContent   = isp   ?? "—";
   if (srvEl)   srvEl.textContent   = server ? (server.length > 22 ? server.slice(0, 22) + "…" : server) : "—";
 }
 
@@ -1758,6 +1758,7 @@ async function runSpeedtest() {
     const result = await api("/speedtest/run", "POST");
     _stRunning = false;
     cancelAnimationFrame(_stScanRaf);
+    _stScanRaf = null;
     if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
     if (result.error) { toast("Speedtest failed: " + result.error, "error"); return; }
     // Snap to zero then sweep to result
@@ -1771,6 +1772,7 @@ async function runSpeedtest() {
   } catch(e) {
     _stRunning = false;
     cancelAnimationFrame(_stScanRaf);
+    _stScanRaf = null;
     if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
     toast("Speedtest failed: " + e.message, "error");
   }
