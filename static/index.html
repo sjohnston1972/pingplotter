@@ -1768,7 +1768,7 @@ async function runSpeedtest() {
     _animateGauge("ul", 0, result.upload_mbps,   500,  1200);
     _updateGaugeCentre(result.ping_ms, result.isp, result.server);
     toast(`↓${result.download_mbps} Mbps  ↑${result.upload_mbps} Mbps  ping:${result.ping_ms}ms`);
-    loadSpeedtest();
+    setTimeout(() => loadSpeedtest(), 1300);
   } catch(e) {
     _stRunning = false;
     cancelAnimationFrame(_stScanRaf);
