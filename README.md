@@ -2,7 +2,7 @@
 
 A self-hosted network monitoring dashboard. Probes hosts continuously, stores results locally as flat CSV files, and serves a single-page web UI with live charts, topology graphs, alerting, and reports — no database required.
 
-![Dashboard](https://raw.githubusercontent.com/sjohnston1972/pingplotter/main/docs/screenshot-placeholder.png)
+<img width="2539" height="1276" alt="image" src="https://github.com/user-attachments/assets/1e36183b-e1d9-4755-b0da-b0463ff300be" />
 
 ---
 
