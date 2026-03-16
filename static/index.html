@@ -1663,6 +1663,19 @@ function renderTopologyGraph(container, nodes, edges, deviceCount) {
 // ── Speedtest ─────────────────────────────────────────────────────────────────
 let _stRunning = false;
 let _stEventSource = null;
+let _stRaf = null;
+let _dlTarget = 0, _ulTarget = 0;   // target speeds set by SSE events
+let _dlNow = 0,    _ulNow = 0;      // current smoothed display values
+
+function _gaugeInterp() {
+  // Exponential approach: moves ~6% of remaining distance per frame at 60 fps
+  // that gives ~97% travel in 1 second — fast enough to feel live, smooth enough to look great
+  _dlNow += (_dlTarget - _dlNow) * 0.06;
+  _ulNow += (_ulTarget - _ulNow) * 0.06;
+  _setGaugeNeedle("dl", _dlNow, 1000);
+  _setGaugeNeedle("ul", _ulNow, 500);
+  if (_stRunning) _stRaf = requestAnimationFrame(_gaugeInterp);
+}
 
 async function loadSpeedtest() {
   const hours = parseInt(document.getElementById("speedtest-hours")?.value || 168);
@@ -1729,9 +1742,13 @@ function runSpeedtest() {
   if (_stEventSource) { _stEventSource.close(); _stEventSource = null; }
   const btn = document.getElementById("st-run-btn");
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="st-spinner"></span>Testing…'; }
+
+  // Reset interpolation state and start smooth animation loop
+  _dlTarget = 0; _ulTarget = 0; _dlNow = 0; _ulNow = 0;
   _stRunning = true;
   _setGaugeNeedle("dl", 0, 1000);
   _setGaugeNeedle("ul", 0, 500);
+  _stRaf = requestAnimationFrame(_gaugeInterp);
 
   const es = new EventSource("/api/speedtest/stream");
   _stEventSource = es;
@@ -1743,17 +1760,19 @@ function runSpeedtest() {
         _updateGaugeCentre(msg.ping_ms, null, msg.server || null);
         break;
       case "download":
-        _setGaugeNeedle("dl", msg.speed, 1000);
+        _dlTarget = msg.speed;   // interp loop glides toward this
         break;
       case "download_done":
-        _setGaugeNeedle("dl", msg.download_mbps, 1000);
-        _gaugeOnLand("dl", msg.download_mbps, 1000);
+        _dlTarget = msg.download_mbps;
         break;
       case "upload":
-        _setGaugeNeedle("ul", msg.speed, 500);
+        _ulTarget = msg.speed;
+        if (msg.download_mbps) _dlTarget = msg.download_mbps; // hold DL at final
         break;
-      case "complete":
-        es.close(); _stEventSource = null; _stRunning = false;
+      case "complete": {
+        es.close(); _stEventSource = null;
+        _stRunning = false;       // stops the interp loop
+        cancelAnimationFrame(_stRaf); _stRaf = null;
         if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
         _setGaugeNeedle("dl", msg.download_mbps, 1000);
         _setGaugeNeedle("ul", msg.upload_mbps, 500);
@@ -1763,8 +1782,11 @@ function runSpeedtest() {
         toast(`↓${msg.download_mbps} Mbps  ↑${msg.upload_mbps} Mbps  ping:${msg.ping_ms}ms`);
         setTimeout(() => loadSpeedtest(), 500);
         break;
+      }
       case "error":
-        es.close(); _stEventSource = null; _stRunning = false;
+        es.close(); _stEventSource = null;
+        _stRunning = false;
+        cancelAnimationFrame(_stRaf); _stRaf = null;
         if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
         toast("Speedtest failed: " + msg.message, "error");
         break;
@@ -1773,7 +1795,9 @@ function runSpeedtest() {
 
   es.onerror = () => {
     if (!_stRunning) return;
-    es.close(); _stEventSource = null; _stRunning = false;
+    es.close(); _stEventSource = null;
+    _stRunning = false;
+    cancelAnimationFrame(_stRaf); _stRaf = null;
     if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
     toast("Speedtest connection lost", "error");
   };

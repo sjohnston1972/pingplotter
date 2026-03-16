@@ -60,18 +60,15 @@ def run_once_streaming(emit) -> dict | None:
         dl_done = threading.Event()
 
         def _poll_dl():
-            prev_b, prev_t, smooth = 0, time.perf_counter(), 0.0
+            # Cumulative speed from the start of the download phase — stable,
+            # converges to the true rate regardless of burst-y parallel streams.
+            start_t = time.perf_counter()
             while not dl_done.is_set():
-                time.sleep(0.3)
+                time.sleep(0.1)
                 cur_b = getattr(s.results, "bytes_received", 0)
-                cur_t = time.perf_counter()
-                dt = cur_t - prev_t
-                delta = cur_b - prev_b
-                if dt > 0 and delta > 0:
-                    raw = delta * 8 / (dt * 1_000_000)
-                    smooth = 0.6 * smooth + 0.4 * raw if smooth else raw
-                    emit("download", {"speed": round(smooth, 1)})
-                prev_b, prev_t = cur_b, cur_t
+                dt = time.perf_counter() - start_t
+                if dt >= 0.3 and cur_b > 0:
+                    emit("download", {"speed": round(cur_b * 8 / (dt * 1_000_000), 1)})
 
         t = threading.Thread(target=_poll_dl, daemon=True)
         t.start()
@@ -87,18 +84,14 @@ def run_once_streaming(emit) -> dict | None:
         ul_done = threading.Event()
 
         def _poll_ul():
-            prev_b, prev_t, smooth = 0, time.perf_counter(), 0.0
+            start_t = time.perf_counter()
             while not ul_done.is_set():
-                time.sleep(0.3)
+                time.sleep(0.1)
                 cur_b = getattr(s.results, "bytes_sent", 0)
-                cur_t = time.perf_counter()
-                dt = cur_t - prev_t
-                delta = cur_b - prev_b
-                if dt > 0 and delta > 0:
-                    raw = delta * 8 / (dt * 1_000_000)
-                    smooth = 0.6 * smooth + 0.4 * raw if smooth else raw
-                    emit("upload", {"speed": round(smooth, 1), "download_mbps": dl_mbps})
-                prev_b, prev_t = cur_b, cur_t
+                dt = time.perf_counter() - start_t
+                if dt >= 0.3 and cur_b > 0:
+                    emit("upload", {"speed": round(cur_b * 8 / (dt * 1_000_000), 1),
+                                    "download_mbps": dl_mbps})
 
         t2 = threading.Thread(target=_poll_ul, daemon=True)
         t2.start()
