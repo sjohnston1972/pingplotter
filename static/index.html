@@ -1662,7 +1662,7 @@ function renderTopologyGraph(container, nodes, edges, deviceCount) {
 
 // ── Speedtest ─────────────────────────────────────────────────────────────────
 let _stRunning = false;
-let _stScanRaf = null;
+let _stEventSource = null;
 
 async function loadSpeedtest() {
   const hours = parseInt(document.getElementById("speedtest-hours")?.value || 168);
@@ -1690,18 +1690,6 @@ function _setGaugeNeedle(which, value, max) {
   if (valEl) valEl.textContent = Number.isInteger(value) ? value : value.toFixed(1);
 }
 
-function _animateGauge(which, from, to, max, duration) {
-  const startTime = performance.now();
-  const ease = t => 1 - Math.pow(1 - t, 3); // ease-out cubic
-  function frame(now) {
-    const t = Math.min((now - startTime) / duration, 1);
-    _setGaugeNeedle(which, from + (to - from) * ease(t), max);
-    if (t < 1) { requestAnimationFrame(frame); }
-    else { _gaugeOnLand(which, to, max); }
-  }
-  requestAnimationFrame(frame);
-}
-
 function _gaugeOnLand(which, value, max) {
   const hub = document.getElementById("gauge-" + which + "-hub");
   if (!hub) return;
@@ -1710,18 +1698,6 @@ function _gaugeOnLand(which, value, max) {
   hub.setAttribute("r", "8");
   hub.style.filter = `drop-shadow(0 0 8px ${color})`;
   setTimeout(() => { hub.setAttribute("r", "6"); hub.style.filter = ""; }, 300);
-}
-
-function _startGaugeScan() {
-  const t0 = performance.now();
-  function frame(now) {
-    if (!_stRunning) return;
-    const pct = 0.10 + 0.30 * (0.5 + 0.5 * Math.sin(((now - t0) / 2500) * Math.PI * 2));
-    _setGaugeNeedle("dl", pct * 1000, 1000);
-    _setGaugeNeedle("ul", pct * 500, 500);
-    _stScanRaf = requestAnimationFrame(frame);
-  }
-  _stScanRaf = requestAnimationFrame(frame);
 }
 
 function _updateGaugeCentre(ping, isp, server) {
@@ -1748,34 +1724,59 @@ function renderSpeedtestGauges(results) {
   _updateGaugeCentre(last.ping_ms, last.isp, last.server);
 }
 
-async function runSpeedtest() {
+function runSpeedtest() {
   if (_stRunning) return;
+  if (_stEventSource) { _stEventSource.close(); _stEventSource = null; }
   const btn = document.getElementById("st-run-btn");
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="st-spinner"></span>Testing…'; }
   _stRunning = true;
-  _startGaugeScan();
-  try {
-    const result = await api("/speedtest/run", "POST");
-    _stRunning = false;
-    cancelAnimationFrame(_stScanRaf);
-    _stScanRaf = null;
+  _setGaugeNeedle("dl", 0, 1000);
+  _setGaugeNeedle("ul", 0, 500);
+
+  const es = new EventSource("/api/speedtest/stream");
+  _stEventSource = es;
+
+  es.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    switch (msg.phase) {
+      case "ping":
+        _updateGaugeCentre(msg.ping_ms, null, msg.server || null);
+        break;
+      case "download":
+        _setGaugeNeedle("dl", msg.speed, 1000);
+        break;
+      case "download_done":
+        _setGaugeNeedle("dl", msg.download_mbps, 1000);
+        _gaugeOnLand("dl", msg.download_mbps, 1000);
+        break;
+      case "upload":
+        _setGaugeNeedle("ul", msg.speed, 500);
+        break;
+      case "complete":
+        es.close(); _stEventSource = null; _stRunning = false;
+        if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
+        _setGaugeNeedle("dl", msg.download_mbps, 1000);
+        _setGaugeNeedle("ul", msg.upload_mbps, 500);
+        _gaugeOnLand("dl", msg.download_mbps, 1000);
+        _gaugeOnLand("ul", msg.upload_mbps, 500);
+        _updateGaugeCentre(msg.ping_ms, msg.isp, msg.server);
+        toast(`↓${msg.download_mbps} Mbps  ↑${msg.upload_mbps} Mbps  ping:${msg.ping_ms}ms`);
+        setTimeout(() => loadSpeedtest(), 500);
+        break;
+      case "error":
+        es.close(); _stEventSource = null; _stRunning = false;
+        if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
+        toast("Speedtest failed: " + msg.message, "error");
+        break;
+    }
+  };
+
+  es.onerror = () => {
+    if (!_stRunning) return;
+    es.close(); _stEventSource = null; _stRunning = false;
     if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
-    if (result.error) { toast("Speedtest failed: " + result.error, "error"); return; }
-    // Snap to zero then sweep to result
-    _setGaugeNeedle("dl", 0, 1000);
-    _setGaugeNeedle("ul", 0, 500);
-    _animateGauge("dl", 0, result.download_mbps, 1000, 1200);
-    _animateGauge("ul", 0, result.upload_mbps,   500,  1200);
-    _updateGaugeCentre(result.ping_ms, result.isp, result.server);
-    toast(`↓${result.download_mbps} Mbps  ↑${result.upload_mbps} Mbps  ping:${result.ping_ms}ms`);
-    setTimeout(() => loadSpeedtest(), 1300);
-  } catch(e) {
-    _stRunning = false;
-    cancelAnimationFrame(_stScanRaf);
-    _stScanRaf = null;
-    if (btn) { btn.disabled = false; btn.textContent = "Run Now"; }
-    toast("Speedtest failed: " + e.message, "error");
-  }
+    toast("Speedtest connection lost", "error");
+  };
 }
 
 function renderSpeedtestCharts(results) {

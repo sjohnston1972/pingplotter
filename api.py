@@ -461,8 +461,11 @@ def retention_purge():
     return {"ok": True, "rows_purged": rows_purged}
 
 
+import threading as _threading
 import speedtest_runner
 import digest as digest_mod
+
+_speedtest_lock = _threading.Lock()
 
 # ── Digest endpoints ──────────────────────────────────────────────────────────
 
@@ -495,6 +498,49 @@ async def run_speedtest_endpoint():
 @app.get("/api/speedtest/results")
 def get_speedtest_results(hours: int = 168):
     return storage.load_speedtest(hours)
+
+
+@app.get("/api/speedtest/stream")
+async def speedtest_stream():
+    """SSE: streams real-time speedtest progress (download/upload speed every ~300ms)."""
+    if not _speedtest_lock.acquire(blocking=False):
+        async def _busy():
+            yield 'data: {"phase":"error","message":"Speedtest already running"}\n\n'
+        return StreamingResponse(_busy(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    queue: asyncio.Queue = asyncio.Queue()
+    loop = asyncio.get_event_loop()
+
+    def _emit(phase, payload):
+        loop.call_soon_threadsafe(queue.put_nowait, json.dumps({"phase": phase, **payload}))
+
+    def _run():
+        try:
+            result = speedtest_runner.run_once_streaming(_emit)
+            if result:
+                storage.save_speedtest(result)
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, None)
+            _speedtest_lock.release()
+
+    _threading.Thread(target=_run, daemon=True).start()
+
+    async def event_stream():
+        try:
+            while True:
+                item = await asyncio.wait_for(queue.get(), timeout=120)
+                if item is None:
+                    break
+                yield f"data: {item}\n\n"
+        except asyncio.TimeoutError:
+            yield 'data: {"phase":"error","message":"Speedtest timed out"}\n\n'
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── Static frontend ────────────────────────────────────────────────────────────
