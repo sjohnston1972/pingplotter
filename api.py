@@ -510,7 +510,7 @@ async def speedtest_stream():
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     queue: asyncio.Queue = asyncio.Queue()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def _emit(phase, payload):
         loop.call_soon_threadsafe(queue.put_nowait, json.dumps({"phase": phase, **payload}))
@@ -527,14 +527,17 @@ async def speedtest_stream():
     _threading.Thread(target=_run, daemon=True).start()
 
     async def event_stream():
+        yield ": connected\n\n"  # flush headers immediately so EventSource opens
         try:
             while True:
                 item = await asyncio.wait_for(queue.get(), timeout=120)
                 if item is None:
                     break
                 yield f"data: {item}\n\n"
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, asyncio.CancelledError):
             yield 'data: {"phase":"error","message":"Speedtest timed out"}\n\n'
+        except Exception as exc:
+            yield f'data: {{"phase":"error","message":{json.dumps(str(exc))}}}\n\n'
 
     return StreamingResponse(
         event_stream(),
