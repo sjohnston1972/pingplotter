@@ -1,0 +1,2123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PingPlotter</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <style>
+    :root{--bg:#0d0f12;--surface:#141720;--surface2:#1c2030;--border:#252b3b;--text:#e2e8f0;--muted:#64748b;--accent:#3b82f6;--success:#10b981;--warning:#f59e0b;--danger:#ef4444;--mono:"IBM Plex Mono",monospace;--sans:"IBM Plex Sans",sans-serif}
+    :root.light{--bg:#f1f5f9;--surface:#ffffff;--surface2:#f8fafc;--border:#e2e8f0;--text:#0f172a;--muted:#94a3b8}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+    header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .logo{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:15px;font-weight:600}
+    .logo-icon{width:26px;height:26px;background:var(--accent);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px}
+    nav{display:flex;gap:2px}
+    .nav-tab{background:transparent;border:none;color:var(--muted);font-family:var(--sans);font-size:13px;font-weight:500;padding:6px 16px;border-radius:6px;cursor:pointer;transition:all .15s}
+    .nav-tab:hover{color:var(--text);background:var(--surface2)}
+    .nav-tab.active{color:var(--text);background:var(--surface2)}
+    .status-pill{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+    .pulse{width:7px;height:7px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .page{display:none;flex:1;overflow:hidden}
+    .page.active{display:flex}
+    .scroll-page-wrap{display:none;flex:1;overflow:hidden}
+    .scroll-page-wrap.active{display:flex;flex-direction:column}
+    aside{width:272px;min-width:272px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+    .sidebar-header{padding:14px 14px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+    .sidebar-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+    .btn-add{background:var(--accent);color:#fff;border:none;border-radius:5px;padding:5px 12px;font-size:12px;font-family:var(--sans);cursor:pointer;font-weight:500}
+    .device-list{padding:8px;flex:1}
+    .device-card{border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:6px;cursor:pointer;transition:all .15s}
+    .device-card:hover{background:var(--surface2);border-color:#334155}
+    .device-card.active{background:var(--surface2);border-color:var(--accent)}
+    .device-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+    .device-name{font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:155px}
+    .status-badge{font-family:var(--mono);font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;text-transform:uppercase}
+    .status-badge.up{background:rgba(16,185,129,.15);color:var(--success)}
+    .status-badge.down{background:rgba(239,68,68,.15);color:var(--danger)}
+    .status-badge.unknown{background:rgba(100,116,139,.15);color:var(--muted)}
+    .device-host{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px}
+    .device-stats{display:flex;gap:14px}
+    .stat-mini label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block}
+    .stat-mini span{font-family:var(--mono);font-size:12px;font-weight:500}
+    .device-actions{display:flex;gap:4px;margin-top:10px}
+    .btn-sm{border:1px solid var(--border);background:transparent;color:var(--muted);border-radius:4px;padding:3px 8px;font-size:11px;font-family:var(--sans);cursor:pointer;transition:all .15s}
+    .btn-sm:hover{color:var(--text);border-color:#475569}
+    .btn-sm.danger:hover{color:var(--danger);border-color:var(--danger)}
+    .sparkline{width:100%;height:28px;display:block;margin-top:8px;opacity:.8}
+    main{flex:1;overflow-y:auto;padding:24px}
+    .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--muted)}
+    .empty-icon{font-size:44px;opacity:.25}
+    .empty-state h2{font-size:18px;font-weight:500;color:var(--text)}
+    .empty-state p{font-size:13px;max-width:300px;text-align:center;line-height:1.6}
+    .device-view{display:none}
+    .device-view.visible{display:block}
+    .view-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px}
+    .view-title h1{font-size:20px;font-weight:600;margin-bottom:4px}
+    .view-title .host-label{font-family:var(--mono);font-size:12px;color:var(--muted)}
+    .device-notes-display{font-size:12px;color:var(--muted);margin-top:5px;font-style:italic;max-width:500px;line-height:1.5}
+    .time-range{display:flex;gap:3px}
+    .time-btn{background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:5px 12px;font-size:12px;font-family:var(--mono);cursor:pointer;transition:all .15s}
+    .time-btn:hover{color:var(--text);border-color:#475569}
+    .time-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}
+    .stat-grid-6{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:20px}
+    .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+    .stat-card label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:6px}
+    .stat-card .value{font-family:var(--mono);font-size:22px;font-weight:600;line-height:1}
+    .stat-card .unit{font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:2px}
+    .stat-card.c-danger .value{color:var(--danger)}
+    .stat-card.c-warning .value{color:var(--warning)}
+    .stat-card.c-success .value{color:var(--success)}
+    .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+    .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px}
+    .chart-card.full{grid-column:1/-1}
+    .chart-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:14px}
+    .chart-wrap{position:relative;height:170px}
+    .alert-log{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px}
+    .section-head{padding:12px 18px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:flex;align-items:center;justify-content:space-between}
+    .section-actions{display:flex;gap:6px}
+    .data-table{width:100%;border-collapse:collapse;font-size:12px}
+    .data-table th{text-align:left;padding:9px 18px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface2)}
+    .data-table td{padding:9px 18px;border-bottom:1px solid var(--border);font-family:var(--mono)}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:var(--surface2)}
+    .alert-type{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600;text-transform:uppercase}
+    .alert-type.down{background:rgba(239,68,68,.15);color:var(--danger)}
+    .alert-type.high_latency{background:rgba(239,68,68,.15);color:var(--danger)}
+    .alert-type.high_latency_warn{background:rgba(245,158,11,.15);color:var(--warning)}
+    .alert-type.high_jitter{background:rgba(239,68,68,.15);color:var(--danger)}
+    .alert-type.high_jitter_warn{background:rgba(245,158,11,.15);color:var(--warning)}
+    .no-data{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+    .scroll-page{flex:1;overflow-y:auto;padding:28px}
+    .page-heading{margin-bottom:22px}
+    .page-heading h1{font-size:20px;font-weight:600;margin-bottom:4px}
+    .page-heading p{font-size:13px;color:var(--muted)}
+    .report-controls{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+    .report-controls label{font-size:12px;color:var(--muted);font-weight:500}
+    .ctrl-select{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 12px;font-family:var(--mono);font-size:12px;outline:none}
+    .ctrl-select:focus{border-color:var(--accent)}
+    .btn-run{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 20px;font-size:13px;font-family:var(--sans);font-weight:500;cursor:pointer}
+    .report-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:24px}
+    .rdc{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px}
+    .rdc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+    .rdc-name{font-size:14px;font-weight:600}
+    .rdc-host{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+    .rdc-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .rdc-stat label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:3px}
+    .rdc-val{font-family:var(--mono);font-size:16px;font-weight:600}
+    .rdc-val.good{color:var(--success)}
+    .rdc-val.warn{color:var(--warning)}
+    .rdc-val.bad{color:var(--danger)}
+    .table-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px}
+    .settings-wrap{max-width:640px;display:flex;flex-direction:column;gap:20px}
+    .s-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .s-card-head{padding:14px 20px;border-bottom:1px solid var(--border)}
+    .s-card-head h2{font-size:14px;font-weight:600}
+    .s-card-head p{font-size:12px;color:var(--muted);margin-top:2px}
+    .s-card-body{padding:20px;display:flex;flex-direction:column;gap:16px}
+    .s-field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+    .s-field input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:border-color .15s}
+    .s-field input:focus{border-color:var(--accent)}
+    .s-field .hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
+    .s-card-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px}
+    .btn-save{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-family:var(--sans);font-weight:500;cursor:pointer}
+    .btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:8px 16px;font-size:13px;font-family:var(--sans);cursor:pointer;transition:all .15s}
+    .btn-outline:hover{color:var(--text);border-color:#475569}
+    .btn-danger-out{background:transparent;border:1px solid var(--danger);color:var(--danger);border-radius:6px;padding:8px 16px;font-size:13px;font-family:var(--sans);cursor:pointer}
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center}
+    .modal-overlay.open{display:flex}
+    .modal{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:460px;max-height:90vh;overflow-y:auto;padding:26px;animation:fadeUp .2s ease}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    .modal h2{font-size:16px;font-weight:600;margin-bottom:18px}
+    .form-group{margin-bottom:14px}
+    .form-group label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
+    .form-group input,.form-group select,.form-group textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 11px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:border-color .15s}
+    .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent)}
+    .form-group textarea{resize:vertical;min-height:60px;font-family:var(--sans)}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .thresh-section{border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:14px}
+    .thresh-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px}
+    .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+    .btn-cancel{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:7px 16px;font-size:13px;font-family:var(--sans);cursor:pointer}
+    .btn-primary{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 18px;font-size:13px;font-family:var(--sans);font-weight:500;cursor:pointer}
+    .toast{display:none;position:fixed;bottom:24px;right:24px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;font-size:13px;z-index:500;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+    .toast.show{display:flex;align-items:center;gap:8px;animation:fadeUp .2s ease}
+    .toast.success{border-color:var(--success)}
+    .toast.error{border-color:var(--danger)}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    .hop-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px}
+    .hop-table{width:100%;border-collapse:collapse;font-size:12px}
+    .hop-table th{text-align:left;padding:8px 14px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface2)}
+    .hop-table td{padding:7px 14px;border-bottom:1px solid var(--border);font-family:var(--mono);white-space:nowrap}
+    .hop-table tr:last-child td{border-bottom:none}
+    .hop-table tr:hover td{background:var(--surface2)}
+    .lat-bar-wrap{display:flex;align-items:center;gap:6px}
+    .lat-bar{height:5px;border-radius:3px;min-width:2px;background:var(--accent);flex-shrink:0}
+    .lat-bar.warn{background:var(--warning)}
+    .lat-bar.crit{background:var(--danger)}
+    .loss-high{color:var(--danger);font-weight:600}
+    .loss-mid{color:var(--warning);font-weight:600}
+    .heatmap-section{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px}
+    .heatmap-inner{display:grid;gap:1px;padding:0 14px 14px}
+    .heatmap-hour-row{display:grid;grid-template-columns:32px repeat(24,1fr);gap:1px;margin-bottom:2px}
+    .heatmap-row{display:grid;grid-template-columns:32px repeat(24,1fr);gap:1px}
+    .heatmap-day-lbl{font-size:9px;font-family:var(--mono);color:var(--muted);display:flex;align-items:center;padding-right:4px;justify-content:flex-end}
+    .heatmap-hour-lbl{font-size:9px;font-family:var(--mono);color:var(--muted);text-align:center}
+    .heatmap-cell{height:13px;border-radius:2px;cursor:default}
+    .incident-row-ok{background:rgba(16,185,129,.06)}
+    .mtu-result{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;margin-top:6px}
+    .compare-device-list{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+    .compare-check-label{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 12px;transition:all .15s}
+    .compare-check-label:hover{border-color:#475569}
+    .compare-check-label input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px}
+    /* Sidebar search */
+    .sidebar-search{padding:8px 14px 4px;border-bottom:1px solid var(--border)}
+    .sidebar-search input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:5px 9px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none}
+    .sidebar-search input:focus{border-color:var(--accent)}
+    /* Tag color left border */
+    .device-card.has-tag{border-left-width:3px}
+    /* Group headers and icon buttons */
+    .group-header{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:10px 12px 4px;display:flex;align-items:center;gap:6px}
+    .group-header.ungrouped{margin-top:8px}
+    .btn-icon{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:1px 4px;border-radius:3px}
+    .btn-icon:hover{color:var(--text)}
+    .btn-icon.danger:hover{color:var(--danger)}
+    /* Streak badge */
+    .streak-badge{display:inline-block;background:rgba(239,68,68,.15);color:var(--danger);border-radius:3px;font-size:10px;font-weight:600;padding:1px 5px;margin-bottom:4px}
+    /* SLA grid */
+    .sla-grid{display:flex;flex-wrap:wrap;gap:3px;padding:14px}
+    .sla-cell{width:18px;height:18px;border-radius:3px;cursor:default;flex-shrink:0;transition:transform .1s}
+    .sla-cell:hover{transform:scale(1.3)}
+    .sla-up{background:var(--success);opacity:.75}
+    .sla-warn{background:var(--warning);opacity:.75}
+    .sla-down{background:var(--danger);opacity:.75}
+    .sla-none{background:rgba(100,116,139,.15)}
+    /* Route changed badge */
+    .route-badge{display:inline-block;background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.4);border-radius:4px;font-size:10px;font-weight:600;padding:1px 7px;margin-left:8px;animation:pulse 2s infinite}
+    /* Fullscreen overlay */
+    .fs-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:300;align-items:center;justify-content:center;padding:32px}
+    .fs-overlay.open{display:flex}
+    .fs-inner{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:92vw;max-width:1300px;padding:24px;position:relative}
+    .fs-close{position:absolute;top:14px;right:14px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:3px 10px;font-size:13px;cursor:pointer}
+    .fs-wrap{position:relative;height:68vh}
+    /* Geo / kbd */
+    .geo-inline{font-size:10px;color:var(--muted);margin-left:5px}
+    .kbd{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:3px;font-family:var(--mono);font-size:10px;padding:1px 5px;color:var(--muted)}
+    /* Map */
+    #map-container .leaflet-container{background:#0d1117!important}
+    .leaflet-tile-pane{filter:brightness(0.7) saturate(0.6)}
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo"><div class="logo-icon">◆</div>PingPlotter</div>
+  <nav>
+    <button class="nav-tab active" onclick="switchTab('monitor')">Monitor</button>
+    <button class="nav-tab" onclick="switchTab('compare')">Compare</button>
+    <button class="nav-tab" onclick="switchTab('map')">Map</button>
+    <button class="nav-tab" onclick="switchTab('topology')">Topology</button>
+    <button class="nav-tab" onclick="switchTab('speedtest')">Speedtest</button>
+    <button class="nav-tab" onclick="switchTab('reports')">Reports</button>
+    <button class="nav-tab" onclick="switchTab('settings')">Settings</button>
+  </nav>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="status-pill"><div class="pulse"></div><span id="global-status">—</span></div>
+    <button id="theme-toggle" onclick="toggleTheme()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:4px 10px;font-size:12px;font-family:var(--sans);cursor:pointer;transition:all .15s" title="Toggle light/dark mode">☀</button>
+  </div>
+</header>
+
+<div class="page active" id="page-monitor">
+  <aside>
+    <div class="sidebar-header">
+      <span class="sidebar-title">Devices</span>
+      <button class="btn-add" onclick="openAddModal()">+ Add</button>
+    </div>
+    <div class="sidebar-search"><input type="text" id="sidebar-search" placeholder="Search devices… (j/k to navigate)" oninput="filterSidebar()" /></div>
+    <div class="device-list" id="device-list"></div>
+  </aside>
+  <main>
+    <div id="empty-state" class="empty-state">
+      <div class="empty-icon">◆</div>
+      <h2>No device selected</h2>
+      <p>Add a device using the sidebar, then click it to view latency graphs and live stats.</p>
+    </div>
+    <div id="device-view" class="device-view"></div>
+  </main>
+</div>
+
+<div class="scroll-page-wrap" id="page-compare">
+  <div class="scroll-page">
+    <div class="page-heading"><h1>Compare</h1><p>Overlay multiple devices on a single latency chart.</p></div>
+    <div id="compare-device-list" class="compare-device-list"></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      <label style="font-size:12px;color:var(--muted)">Time range:</label>
+      <select class="ctrl-select" id="compare-hours">
+        <option value="1">Last 1h</option>
+        <option value="6">Last 6h</option>
+        <option value="24" selected>Last 24h</option>
+      </select>
+      <button class="btn-run" onclick="loadCompare()">Compare</button>
+    </div>
+    <div class="chart-card">
+      <div class="chart-label">Latency Comparison</div>
+      <div class="chart-wrap" style="height:300px"><canvas id="chart-compare"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="scroll-page-wrap" id="page-map">
+  <div style="flex:1;display:flex;flex-direction:column">
+    <div style="padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center;flex-shrink:0">
+      <span style="font-size:13px;font-weight:500">Network Route Map</span>
+      <button class="btn-run" onclick="loadMap()">Refresh</button>
+      <span id="map-status" style="font-size:12px;color:var(--muted)">Select a traceroute device to see its route</span>
+    </div>
+    <div id="map-container" style="flex:1;min-height:500px"></div>
+  </div>
+</div>
+
+<div class="scroll-page-wrap" id="page-topology">
+  <div style="flex:1;display:flex;flex-direction:column">
+    <div style="padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center;flex-shrink:0">
+      <span style="font-size:13px;font-weight:500">Network Topology</span>
+      <button class="btn-run" onclick="loadTopology()">Refresh</button>
+      <span id="topo-legend" style="font-size:11px;color:var(--muted)">Nodes = hop IPs · Shared hops highlighted · Click to inspect</span>
+    </div>
+    <div id="topo-container" style="flex:1;min-height:500px;position:relative;overflow:hidden"></div>
+    <div id="topo-tooltip" style="position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:12px;font-family:var(--mono);pointer-events:none;display:none;z-index:200"></div>
+  </div>
+</div>
+
+<div class="scroll-page-wrap" id="page-speedtest">
+  <div class="scroll-page" style="padding:24px;max-width:1100px;margin:0 auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h2 style="font-size:18px;font-weight:600">Bandwidth History</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="ctrl-select" id="speedtest-hours" onchange="loadSpeedtest()">
+          <option value="24">Last 24h</option>
+          <option value="168" selected>Last 7d</option>
+          <option value="720">Last 30d</option>
+        </select>
+        <button class="btn-run" onclick="runSpeedtest()">Run Now</button>
+      </div>
+    </div>
+    <div id="speedtest-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px"></div>
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-label">Download &amp; Upload (Mbps)</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="chart-speedtest-bw"></canvas></div>
+    </div>
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-label">Ping (ms)</div>
+      <div class="chart-wrap" style="height:160px"><canvas id="chart-speedtest-ping"></canvas></div>
+    </div>
+    <div class="table-card">
+      <div class="section-head">History</div>
+      <div id="speedtest-history"></div>
+    </div>
+  </div>
+</div>
+
+<div class="scroll-page-wrap" id="page-reports">
+  <div class="scroll-page">
+    <div class="page-heading"><h1>Reports</h1><p>Per-device summary statistics across a selected time window, plus full alert history.</p></div>
+    <div class="report-controls">
+      <label>Time range:</label>
+      <select class="ctrl-select" id="report-hours">
+        <option value="1">Last 1 hour</option>
+        <option value="6">Last 6 hours</option>
+        <option value="24" selected>Last 24 hours</option>
+        <option value="168">Last 7 days</option>
+      </select>
+      <button class="btn-run" onclick="loadReport()">Generate</button>
+    </div>
+    <div id="report-grid" class="report-grid"></div>
+    <div class="table-card">
+      <div class="section-head">Alert History</div>
+      <table class="data-table">
+        <thead><tr><th>Time</th><th>Device</th><th>Type</th><th>Value</th><th>Threshold</th></tr></thead>
+        <tbody id="report-alert-body"></tbody>
+      </table>
+    </div>
+    <div class="table-card" style="margin-top:16px">
+      <div class="section-head">Correlated Network Events</div>
+      <div id="network-events"></div>
+    </div>
+    <div class="table-card" style="margin-top:16px">
+      <div class="section-head" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Digest Preview</span>
+        <button class="btn-sm" onclick="sendDigest()">Send Now</button>
+      </div>
+      <pre id="digest-preview" style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:12px;white-space:pre-wrap;overflow-x:auto"></pre>
+    </div>
+  </div>
+</div>
+
+<div class="scroll-page-wrap" id="page-settings">
+  <div class="scroll-page">
+    <div class="page-heading"><h1>Settings</h1><p>Application configuration. Changes take effect immediately.</p></div>
+    <div class="settings-wrap">
+      <div class="s-card">
+        <div class="s-card-head"><h2>Slack Alerts</h2><p>Incoming webhook for alert notifications.</p></div>
+        <div class="s-card-body">
+          <div class="s-field">
+            <label>Webhook URL</label>
+            <input type="password" id="s-webhook" placeholder="https://hooks.slack.com/services/..." autocomplete="off" />
+            <div class="hint">Saved to <code>data/settings.json</code>. The environment variable <code>SLACK_WEBHOOK_URL</code> always overrides this if set.</div>
+          </div>
+        </div>
+        <div class="s-card-foot">
+          <button class="btn-save" onclick="saveSection('slack')">Save</button>
+          <button class="btn-outline" onclick="testSlack()">Send Test Message</button>
+        </div>
+      </div>
+      <div class="s-card">
+        <div class="s-card-head"><h2>Discord Alerts</h2><p>Incoming webhook for Discord alert notifications.</p></div>
+        <div class="s-card-body">
+          <div class="s-field">
+            <label>Webhook URL</label>
+            <input type="text" id="s-discord-webhook" class="form-input" placeholder="https://discord.com/api/webhooks/..." autocomplete="off" />
+          </div>
+        </div>
+        <div class="s-card-foot">
+          <button class="btn-save" onclick="saveSection('discord')">Save</button>
+          <button class="btn-outline" style="margin-left:8px" onclick="testDiscord()">Send Test Message</button>
+        </div>
+      </div>
+      <div class="s-card">
+        <div class="s-card-head"><h2>Microsoft Teams Alerts</h2><p>Incoming webhook for Teams alert notifications.</p></div>
+        <div class="s-card-body">
+          <div class="s-field">
+            <label>Webhook URL</label>
+            <input type="text" id="s-teams-webhook" class="form-input" placeholder="https://outlook.office.com/webhook/..." autocomplete="off" />
+          </div>
+        </div>
+        <div class="s-card-foot">
+          <button class="btn-save" onclick="saveSection('teams')">Save</button>
+          <button class="btn-outline" style="margin-left:8px" onclick="testTeams()">Send Test Message</button>
+        </div>
+      </div>
+      <div class="s-card">
+        <div class="s-card-head"><h2>Email Alerts (SMTP)</h2><p>Send alert notifications via email.</p></div>
+        <div class="s-card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="s-field"><label>SMTP Host</label><input type="text" id="s-smtp-host" class="form-input" placeholder="smtp.gmail.com" /></div>
+            <div class="s-field"><label>Port</label><input type="number" id="s-smtp-port" class="form-input" value="587" /></div>
+            <div class="s-field"><label>Username</label><input type="text" id="s-smtp-user" class="form-input" /></div>
+            <div class="s-field"><label>Password</label><input type="password" id="s-smtp-pass" class="form-input" autocomplete="off" /></div>
+            <div class="s-field"><label>From</label><input type="text" id="s-smtp-from" class="form-input" /></div>
+            <div class="s-field"><label>To</label><input type="text" id="s-smtp-to" class="form-input" /></div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;margin:10px 0;cursor:pointer">
+            <input type="checkbox" id="s-email-enabled" /> Enable email alerts
+          </label>
+        </div>
+          <div class="form-group" style="margin-top:10px">
+            <label>Auto-digest interval (hours, 0=disabled)</label>
+            <input type="number" id="s-digest-interval" class="form-input" style="width:120px" min="0" max="168" />
+          </div>
+        </div>
+        <div class="s-card-foot">
+          <button class="btn-save" onclick="saveSection('email')">Save</button>
+          <button class="btn-outline" style="margin-left:8px" onclick="testEmail()">Send Test Message</button>
+        </div>
+      </div>
+      <div class="s-card">
+        <div class="s-card-head"><h2>Alert Behaviour</h2><p>Controls repeat alert frequency for the same issue.</p></div>
+        <div class="s-card-body">
+          <div class="s-field">
+            <label>Alert Cooldown (seconds)</label>
+            <input type="number" id="s-cooldown" min="30" max="86400" />
+            <div class="hint">Minimum time between repeat alerts per device per alert type. Default: 300 (5 minutes).</div>
+          </div>
+        </div>
+        <div class="s-card-foot"><button class="btn-save" onclick="saveSection('alerting')">Save</button></div>
+      </div>
+      <div class="s-card">
+        <div class="s-card-head"><h2>Defaults</h2><p>Pre-filled values when adding new devices.</p></div>
+        <div class="s-card-body">
+          <div class="s-field">
+            <label>Default Ping Interval (seconds)</label>
+            <input type="number" id="s-interval" min="1" max="300" />
+            <div class="hint">Used as the default interval when the Add Device dialog opens.</div>
+          </div>
+        </div>
+        <div class="s-card-foot"><button class="btn-save" onclick="saveSection('defaults')">Save</button></div>
+      </div>
+      <div class="s-card">
+        <div class="s-card-head"><h2>Custom Webhook</h2><p>POST JSON to any URL after every alert (Slack, PagerDuty, custom integrations).</p></div>
+        <div class="s-card-body">
+          <div class="s-field">
+            <label>Webhook URL</label>
+            <input type="url" id="s-custom-webhook" placeholder="https://example.com/hooks/pingplot" />
+            <div class="hint">Receives JSON: <code>{device_id, device_name, host, alert_type, value, threshold}</code></div>
+          </div>
+        </div>
+        <div class="s-card-foot"><button class="btn-save" onclick="saveSection('webhook')">Save</button></div>
+      </div>
+      <div class="s-card">
+        <div class="s-card-head"><h2>Data Retention</h2><p>Controls how long historical ping data is kept on disk.</p></div>
+        <div class="s-card-body">
+          <div class="s-field">
+            <label>Retain data for (days)</label>
+            <input type="number" id="s-retention" min="1" max="365" />
+            <div class="hint">CSV rows older than this are removed when a purge runs. The alert log is not affected.</div>
+          </div>
+        </div>
+        <div class="s-card-foot">
+          <button class="btn-save" onclick="saveSection('retention')">Save</button>
+          <button class="btn-danger-out" onclick="runPurge()">Purge Old Data Now</button>
+        </div>
+      </div>
+      <div class="s-card">
+        <div class="s-card-head"><h2>Device Groups</h2><p>Organise devices into named groups in the sidebar.</p></div>
+        <div class="s-card-body">
+          <div id="groups-list" style="margin-bottom:10px;display:flex;flex-wrap:wrap;gap:6px"></div>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="new-group-name" class="form-group" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 11px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none" placeholder="Group name" />
+            <button class="btn-primary" onclick="createGroup()">Add Group</button>
+          </div>
+        </div>
+      </div>
+      <div class="s-card">
+        <div class="s-card-head"><h2>Maintenance Windows</h2><p>Schedule planned downtime periods — alerts are suppressed and charts show a shaded region.</p></div>
+        <div class="s-card-body">
+          <div id="maintenance-list" style="margin-bottom:12px"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end">
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">Label</label>
+              <input type="text" id="maint-label" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 11px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none" placeholder="e.g. Planned downtime" />
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">Start (local time)</label>
+              <input type="datetime-local" id="maint-start" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 11px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none" />
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">End (local time)</label>
+              <input type="datetime-local" id="maint-end" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 11px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none" />
+            </div>
+            <button class="btn-primary" onclick="createMaintenance()">Schedule</button>
+          </div>
+          <div style="margin-top:8px">
+            <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">Device (blank = all devices)</label>
+            <select id="maint-device" class="ctrl-select" style="width:200px">
+              <option value="">All devices</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="device-modal">
+  <div class="modal">
+    <h2 id="modal-title">Add Device</h2>
+    <input type="hidden" id="modal-device-id" />
+    <div class="form-group"><label>Device Name</label><input type="text" id="field-name" placeholder="e.g. Core Switch" /></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Probe Type</label>
+        <select id="field-probe" onchange="updateHostLabel()">
+          <option value="icmp">ICMP Ping</option>
+          <option value="http">HTTP</option>
+          <option value="tcp">TCP Port</option>
+          <option value="dns">DNS</option>
+          <option value="traceroute">Traceroute (MTR)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Ping Interval (seconds)</label>
+        <input type="number" id="field-interval" value="5" min="1" max="3600" />
+        <div id="interval-hint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+      </div>
+    </div>
+    <div class="form-group"><label id="host-label">Host / IP Address</label><input type="text" id="field-host" placeholder="e.g. 192.168.1.1" /></div>
+    <div id="icmp-options" style="display:none">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Packet Size (bytes)</label>
+          <input type="number" id="field-pktsize" placeholder="default (32)" min="1" max="65500" />
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Windows default: 32 · Linux default: 56</div>
+        </div>
+        <div class="form-group" style="display:flex;flex-direction:column;justify-content:center">
+          <label style="margin-bottom:10px">Options</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400;color:var(--text)">
+            <input type="checkbox" id="field-dfbit" style="width:14px;height:14px;accent-color:var(--accent)" />
+            Set DF bit (Don't Fragment)
+          </label>
+          <div style="font-size:11px;color:var(--muted);margin-top:5px">Prevents fragmentation; useful for MTU path discovery</div>
+        </div>
+      </div>
+    </div>
+    <div class="thresh-section">
+      <div class="thresh-title">Alert Thresholds (leave blank to disable)</div>
+      <div class="form-row">
+        <div class="form-group"><label>Latency Warning (ms)</label><input type="number" id="field-lat-warn" placeholder="e.g. 60" /></div>
+        <div class="form-group"><label>Latency Critical (ms)</label><input type="number" id="field-lat" placeholder="e.g. 100" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Jitter Warning (ms)</label><input type="number" id="field-jit-warn" placeholder="e.g. 10" /></div>
+        <div class="form-group"><label>Jitter Critical (ms)</label><input type="number" id="field-jit" placeholder="e.g. 20" /></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea id="field-notes" placeholder="Optional notes about this device..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>Tag Color <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--muted)">(shown as sidebar accent)</span></label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="color" id="field-tagcolor" value="#3b82f6" style="width:40px;height:32px;padding:2px;background:var(--bg);border:1px solid var(--border);border-radius:5px;cursor:pointer" />
+        <button type="button" class="btn-sm" onclick="document.getElementById('field-tagcolor').value='#3b82f6'">Reset</button>
+        <button type="button" class="btn-sm" onclick="document.getElementById('field-tagcolor').value=''" style="color:var(--muted)">None</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveDevice()">Save Device</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<div class="fs-overlay" id="fs-overlay" onclick="closeFsOverlay(event)">
+  <div class="fs-inner">
+    <button class="fs-close" onclick="closeFsOverlayBtn()">✕ Close</button>
+    <div class="chart-label" id="fs-label" style="margin-bottom:14px"></div>
+    <div class="fs-wrap"><canvas id="fs-canvas"></canvas></div>
+  </div>
+</div>
+<script>
+let devices = [], activeDeviceId = null, activeHours = 1, charts = {}, mtuCache = {}, fsChart = null;
+let groups = [];
+
+async function loadGroups() {
+  groups = await api("/groups");
+}
+const prevHopIps = {};
+const prevTraceHops = {};
+const _geoCache = {};  // persistent across re-renders: ip -> geo result
+const PALETTE = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#f97316","#84cc16"];
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const light = document.documentElement.classList.toggle("light");
+  localStorage.setItem("theme", light ? "light" : "dark");
+  document.getElementById("theme-toggle").textContent = light ? "☾" : "☀";
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  if (localStorage.getItem("theme") === "light") {
+    document.documentElement.classList.add("light");
+    document.getElementById("theme-toggle").textContent = "☾";
+  }
+  loadDevices().then(initSSE);
+  loadSettings();
+  setInterval(loadDevices, 30000);
+  setInterval(() => { if (activeDeviceId) loadDeviceData(activeDeviceId); }, 15000);
+});
+
+// ── SSE live status ───────────────────────────────────────────────────────────
+let sseSource = null;
+function initSSE() {
+  if (sseSource) sseSource.close();
+  sseSource = new EventSource("/api/sse");
+  sseSource.onmessage = e => {
+    const statuses = JSON.parse(e.data);
+    const map = {};
+    statuses.forEach(s => { map[s.device_id] = s; });
+    devices.forEach(d => { d.live = map[d.id] || d.live || {}; });
+    renderSidebarOnly();
+    const up = devices.filter(d => d.live && d.live.status === "up").length;
+    document.getElementById("global-status").textContent = up + "/" + devices.length + " up";
+  };
+  sseSource.onerror = () => { sseSource.close(); setTimeout(initSSE, 5000); };
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+const TABS = ["monitor", "compare", "map", "topology", "speedtest", "reports", "settings"];
+function switchTab(tab) {
+  TABS.forEach((t, i) => {
+    const page = document.getElementById("page-" + t);
+    const navBtn = document.querySelectorAll(".nav-tab")[i];
+    if (t === "monitor") {
+      page.classList.toggle("active", t === tab);
+    } else {
+      page.classList.toggle("active", t === tab);
+    }
+    navBtn.classList.toggle("active", t === tab);
+  });
+  if (tab === "compare") renderCompareDeviceList();
+  if (tab === "map") { loadMap(); setTimeout(() => leafletMap && leafletMap.invalidateSize(), 100); }
+  if (tab === "topology") loadTopology();
+  if (tab === "speedtest") loadSpeedtest();
+  if (tab === "reports") loadReport();
+  if (tab === "settings") { loadSettings(); loadMaintenance(); }
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function api(path, method = "GET", body = null) {
+  const opts = { method, headers: { "Content-Type": "application/json" } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch("/api" + path, opts);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+function toast(msg, type = "success") {
+  const el = document.getElementById("toast");
+  el.textContent = (type === "success" ? "✓ " : "✗ ") + msg;
+  el.className = "toast show " + type;
+  setTimeout(() => { el.className = "toast"; }, 3500);
+}
+
+// ── Device list ───────────────────────────────────────────────────────────────
+async function loadDevices() {
+  await loadGroups();
+  devices = await api("/devices");
+  renderSidebar();
+  const up = devices.filter(d => d.live && d.live.status === "up").length;
+  document.getElementById("global-status").textContent = up + "/" + devices.length + " up";
+  drawSparklines();
+}
+
+// renderSidebarOnly: update cards without re-fetching sparkline data
+function renderSidebarOnly() {
+  renderSidebar();
+  // Redraw sparklines from cached data (no API call)
+  devices.forEach(d => {
+    const canvas = document.getElementById("sparkline-" + d.id);
+    if (canvas && sparklineData[d.id]) drawSparkline(canvas, sparklineData[d.id]);
+  });
+}
+
+function renderDeviceCard(d, q) {
+  if (q && !d.name.toLowerCase().includes(q) && !d.host.toLowerCase().includes(q)) return "";
+  const s = d.live || {};
+  const status = s.status || "unknown";
+  const lat = s.last_latency != null ? s.last_latency.toFixed(1) + "ms" : "--";
+  const streak = s.streak > 1 ? `<span class="streak-badge">${s.streak}✕ loss</span>` : "";
+  const border = d.tag_color ? `border-left:3px solid ${d.tag_color}` : "";
+  return `<div class="device-card${d.id === activeDeviceId ? " active" : ""}${d.tag_color ? " has-tag" : ""}"
+    data-id="${d.id}" style="${border}" onclick="selectDevice(${d.id})">
+    <div class="device-card-top">
+      <span class="device-name">${esc(d.name)}</span>
+      <span class="status-badge ${status}">${status}</span>
+    </div>
+    <div class="device-host">${esc(d.host)} <span style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.05em">${d.probe_type || "icmp"}</span></div>
+    ${streak}
+    <div class="device-stats">
+      <div class="stat-mini"><label>Latency</label><span>${lat}</span></div>
+      <div class="stat-mini"><label>Every</label><span>${d.interval_sec}s</span></div>
+    </div>
+    <canvas id="sparkline-${d.id}" class="sparkline" width="240" height="28"></canvas>
+    <div class="device-actions">
+      <button class="btn-sm" onclick="event.stopPropagation();editDevice(${d.id})">Edit</button>
+      <button class="btn-sm" onclick="event.stopPropagation();assignGroup(${d.id})">Group</button>
+      <button class="btn-sm danger" onclick="event.stopPropagation();deleteDevice(${d.id})">Remove</button>
+    </div>
+  </div>`;
+}
+
+function renderSidebar() {
+  const q = document.getElementById("sidebar-search")?.value.toLowerCase() || "";
+  const list = document.getElementById("device-list");
+
+  const ungrouped = devices.filter(d => !d.group_id);
+  const grouped = {};
+  for (const g of groups) {
+    grouped[g.id] = { group: g, devs: devices.filter(d => d.group_id === g.id) };
+  }
+
+  let html = "";
+
+  // Render groups first
+  for (const gid of Object.keys(grouped)) {
+    const { group, devs } = grouped[gid];
+    const visible = devs.filter(d => !q || d.name.toLowerCase().includes(q) || d.host.toLowerCase().includes(q));
+    if (visible.length === 0 && q) continue;
+    html += `<div class="group-header">
+      <span>${esc(group.name)}</span>
+      <button class="btn-icon" title="Rename group" onclick="renameGroup(${group.id}, '${esc(group.name)}')">✎</button>
+      <button class="btn-icon danger" title="Delete group" onclick="deleteGroup(${group.id})">✕</button>
+    </div>`;
+    for (const d of visible) {
+      html += renderDeviceCard(d, q);
+    }
+  }
+
+  // Ungrouped
+  if (ungrouped.length) {
+    if (groups.length) html += `<div class="group-header ungrouped">Ungrouped</div>`;
+    for (const d of ungrouped) html += renderDeviceCard(d, q);
+  }
+
+  list.innerHTML = html || `<p style="color:var(--muted);font-size:13px;padding:12px">No devices.</p>`;
+  drawSparklines();
+}
+
+// ── Sparklines ────────────────────────────────────────────────────────────────
+let sparklineData = {};
+async function drawSparklines() {
+  try { sparklineData = await api("/sparklines?minutes=10"); } catch(e) { return; }
+  devices.forEach(d => {
+    const canvas = document.getElementById("sparkline-" + d.id);
+    if (canvas) drawSparkline(canvas, sparklineData[d.id] || []);
+  });
+}
+
+function drawSparkline(canvas, data) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const valid = data.filter(v => v != null);
+  if (valid.length < 2) return;
+  const max = Math.max(...valid, 1);
+  const min = Math.min(...valid, 0);
+  const range = max - min || 1;
+  ctx.strokeStyle = "#3b82f6";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  let moved = false;
+  data.forEach((v, i) => {
+    if (v == null) { moved = false; return; }
+    const x = (i / (data.length - 1)) * w;
+    const y = h - 3 - ((v - min) / range) * (h - 6);
+    if (!moved) { ctx.moveTo(x, y); moved = true; } else { ctx.lineTo(x, y); }
+  });
+  ctx.stroke();
+  // Latest dot
+  const li = [...data].reverse().findIndex(v => v != null);
+  if (li >= 0) {
+    const idx = data.length - 1 - li;
+    const v = data[idx];
+    const x = (idx / (data.length - 1)) * w;
+    const y = h - 3 - ((v - min) / range) * (h - 6);
+    ctx.fillStyle = "#3b82f6";
+    ctx.beginPath();
+    ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ── Device selection ──────────────────────────────────────────────────────────
+function selectDevice(id) {
+  activeDeviceId = id;
+  activeHours = 1;
+  document.getElementById("empty-state").style.display = "none";
+  renderSidebar();
+  loadDeviceData(id);
+}
+
+async function loadDeviceData(id) {
+  const device = devices.find(d => d.id === id);
+  if (!device) return;
+  try {
+    if (device.probe_type === "traceroute") {
+      const [hops, results, uptime, incidents, heatmap, histogram, sla, allAlerts] = await Promise.all([
+        api("/devices/" + id + "/hops"),
+        api("/devices/" + id + "/results?hours=" + activeHours),
+        api("/devices/" + id + "/uptime?hours=24"),
+        api("/devices/" + id + "/incidents?hours=168"),
+        api("/devices/" + id + "/heatmap"),
+        api("/devices/" + id + "/histogram?hours=" + activeHours),
+        api("/devices/" + id + "/sla?days=30"),
+        api("/alerts"),
+      ]);
+      renderTracerouteView(device, hops, results, uptime, incidents, heatmap, histogram, sla, allAlerts);
+    } else {
+      const [results, summary, uptime, incidents, heatmap, histogram, sla, allAlerts, baseline] = await Promise.all([
+        api("/devices/" + id + "/results?hours=" + activeHours),
+        api("/devices/" + id + "/summary?hours=" + activeHours),
+        api("/devices/" + id + "/uptime?hours=24"),
+        api("/devices/" + id + "/incidents?hours=168"),
+        api("/devices/" + id + "/heatmap"),
+        api("/devices/" + id + "/histogram?hours=" + activeHours),
+        api("/devices/" + id + "/sla?days=30"),
+        api("/alerts"),
+        api("/devices/" + id + "/baseline"),
+      ]);
+      renderDeviceView(device, results, summary, uptime, incidents, heatmap, histogram, sla, allAlerts, baseline);
+    }
+    // Auto-discover MTU in background (uses cache, won't re-run if already known)
+    discoverMtu(id, device.host);
+  } catch(e) { toast("Failed to load data: " + e.message, "error"); }
+}
+
+function setTimeRange(h) {
+  activeHours = h;
+  document.querySelectorAll(".time-btn").forEach(b => b.classList.toggle("active", parseInt(b.dataset.hours) === h));
+  if (activeDeviceId) loadDeviceData(activeDeviceId);
+}
+
+// ── Device view ───────────────────────────────────────────────────────────────
+function renderDeviceView(device, results, summary, uptime, incidents, heatmap, histogram, sla, allAlerts, baseline) {
+  const view = document.getElementById("device-view");
+  view.className = "device-view visible";
+  const latC = summary.avg_latency > (device.thresholds && device.thresholds.latency_ms || Infinity) ? "c-danger" : summary.avg_latency > 80 ? "c-warning" : "c-success";
+  const lossC = summary.loss_pct > 5 ? "c-danger" : summary.loss_pct > 1 ? "c-warning" : "c-success";
+  const uptimeC = uptime.uptime_pct < 95 ? "c-danger" : uptime.uptime_pct < 99 ? "c-warning" : "c-success";
+  const da = allAlerts.filter(a => parseInt(a.device_id) === device.id).slice(-20).reverse();
+  const notesHtml = device.notes ? `<div class="device-notes-display">${esc(device.notes)}</div>` : "";
+  view.innerHTML = `
+    <div class="view-header">
+      <div class="view-title">
+        <h1>${esc(device.name)}</h1>
+        <div class="host-label">${esc(device.host)} &middot; every ${device.interval_sec}s</div>
+        ${notesHtml}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <div class="time-range">
+          <button class="time-btn ${activeHours===1?"active":""}" data-hours="1" onclick="setTimeRange(1)">1h</button>
+          <button class="time-btn ${activeHours===6?"active":""}" data-hours="6" onclick="setTimeRange(6)">6h</button>
+          <button class="time-btn ${activeHours===24?"active":""}" data-hours="24" onclick="setTimeRange(24)">24h</button>
+        </div>
+        <div style="display:flex;gap:6px">
+          <a class="btn-sm" href="/api/devices/${device.id}/export.csv" download style="text-decoration:none">⬇ Export</a>
+          <button class="btn-sm" onclick="pingNow(${device.id})">↺ Ping Now</button>
+        </div>
+      </div>
+    </div>
+    <div class="stat-grid-6">
+      <div class="stat-card ${lossC}"><label>Packet Loss</label><div class="value">${summary.loss_pct ?? "-"}<span class="unit">%</span></div></div>
+      <div class="stat-card ${latC}"><label>Avg Latency</label><div class="value">${summary.avg_latency ?? "-"}<span class="unit">ms</span></div></div>
+      <div class="stat-card"><label>Min / Max</label><div class="value" style="font-size:16px">${summary.min_latency ?? "-"} / ${summary.max_latency ?? "-"}<span class="unit">ms</span></div></div>
+      <div class="stat-card"><label>P95 Latency</label><div class="value">${summary.p95 ?? "-"}<span class="unit">ms</span></div></div>
+      <div class="stat-card"><label>P99 Latency</label><div class="value">${summary.p99 ?? "-"}<span class="unit">ms</span></div></div>
+      <div class="stat-card"><label>Avg Jitter</label><div class="value">${summary.avg_jitter ?? "-"}<span class="unit">ms</span></div></div>
+      <div class="stat-card ${uptimeC}"><label>Uptime 24h</label><div class="value">${uptime.uptime_pct ?? "-"}<span class="unit">%</span></div></div>
+      <div class="stat-card" id="mtu-card-${device.id}" style="cursor:pointer" onclick="discoverMtu(${device.id},'${esc(device.host)}',true)" title="Click to re-run MTU discovery"><label>Path MTU ↻</label><div class="value" id="mtu-val-${device.id}" style="font-size:16px">${mtuCache[device.id] ? mtuCache[device.id].mtu_bytes+"<span class='unit'>B</span>" : "<span style='color:var(--muted);font-size:13px'>…</span>"}</div></div>
+      <div class="stat-card">
+        <label>Baseline</label>
+        <div class="value" style="font-size:18px">${baseline?.mean != null ? baseline.mean + '<span class="unit">ms</span>' : "—"}</div>
+        <div style="font-size:10px;color:var(--muted)">±${baseline?.stddev ?? "—"}ms · ${baseline?.samples ?? 0} samples</div>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card full" ondblclick="openFsOverlay('chart-latency','Latency over time')" style="cursor:zoom-in"><div class="chart-label">Latency over time <span style="font-weight:400;font-size:10px;color:var(--muted)">(dbl-click to expand)</span></div><div class="chart-wrap"><canvas id="chart-latency"></canvas></div></div>
+      <div class="chart-card" ondblclick="openFsOverlay('chart-jitter','Jitter')" style="cursor:zoom-in"><div class="chart-label">Jitter</div><div class="chart-wrap"><canvas id="chart-jitter"></canvas></div></div>
+      <div class="chart-card" ondblclick="openFsOverlay('chart-loss','Success / Failure')" style="cursor:zoom-in"><div class="chart-label">Success / Failure</div><div class="chart-wrap"><canvas id="chart-loss"></canvas></div></div>
+    </div>
+    <div class="chart-card" style="margin-bottom:20px" ondblclick="openFsOverlay('chart-histogram','Latency Distribution')">
+      <div class="chart-label">Latency Distribution <span style="font-weight:400;font-size:10px;color:var(--muted)">(double-click to expand)</span></div>
+      <div class="chart-wrap"><canvas id="chart-histogram"></canvas></div>
+    </div>
+    ${renderSlaSection(sla)}
+    ${renderIncidentTable(incidents)}
+    ${renderHeatmapSection(heatmap)}
+    <div class="alert-log">
+      <div class="section-head">Recent Alerts</div>
+      ${da.length
+        ? `<table class="data-table"><thead><tr><th>Time</th><th>Type</th><th>Value</th><th>Threshold</th></tr></thead><tbody>${
+            da.map(a => `<tr><td>${fmtTime(a.timestamp)}</td><td><span class="alert-type ${a.alert_type}">${a.alert_type.replace(/_/g," ")}</span></td><td>${parseFloat(a.value).toFixed(1)}ms</td><td>${parseFloat(a.threshold).toFixed(1)}ms</td></tr>`).join("")
+          }</tbody></table>`
+        : `<div class="no-data">No alerts triggered in this period.</div>`}
+    </div>`;
+  renderCharts(results, device);
+  renderHistogramChart(histogram);
+}
+
+function renderIncidentTable(incidents) {
+  if (!incidents || !incidents.length) {
+    return `<div class="table-card" style="margin-bottom:20px">
+      <div class="section-head">Outage Incidents (7 days)</div>
+      <div class="no-data">No outages recorded.</div>
+    </div>`;
+  }
+  return `<div class="table-card" style="margin-bottom:20px">
+    <div class="section-head">Outage Incidents (7 days) <span style="font-weight:400;color:var(--danger)">${incidents.length} incident${incidents.length !== 1 ? "s" : ""}</span></div>
+    <table class="data-table">
+      <thead><tr><th>Start</th><th>End</th><th>Duration</th><th>Packets Lost</th></tr></thead>
+      <tbody>${incidents.slice().reverse().map(inc =>
+        `<tr><td>${fmtTime(inc.start)}</td><td>${fmtTime(inc.end)}</td><td style="color:var(--danger)">${formatDuration(inc.duration_sec)}</td><td>${inc.count}</td></tr>`
+      ).join("")}</tbody>
+    </table>
+  </div>`;
+}
+
+function renderHeatmapSection(cells) {
+  const DAY_LABELS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const maxMs = Math.max(...cells.map(c => c.avg_ms || 0), 1);
+  let rows = "";
+  // Hour header
+  let headerRow = `<div class="heatmap-hour-row"><div></div>`;
+  for (let h = 0; h < 24; h++) {
+    headerRow += `<div class="heatmap-hour-lbl">${h % 6 === 0 ? h + "h" : ""}</div>`;
+  }
+  headerRow += `</div>`;
+  for (let day = 0; day < 7; day++) {
+    rows += `<div class="heatmap-row"><div class="heatmap-day-lbl">${DAY_LABELS[day]}</div>`;
+    for (let hour = 0; hour < 24; hour++) {
+      const cell = cells.find(c => c.day === day && c.hour === hour);
+      const val = cell && cell.avg_ms;
+      const title = `${DAY_LABELS[day]} ${hour}:00 — ${val != null ? val + "ms" : "no data"}${cell && cell.count ? " (" + cell.count + " samples)" : ""}`;
+      rows += `<div class="heatmap-cell" style="background:${heatColor(val, maxMs)}" title="${title}"></div>`;
+    }
+    rows += `</div>`;
+  }
+  return `<div class="heatmap-section" style="margin-bottom:20px">
+    <div class="section-head">Latency Heatmap — by day & hour (UTC)</div>
+    <div class="heatmap-inner" style="padding-top:10px">${headerRow}${rows}</div>
+  </div>`;
+}
+
+function heatColor(val, maxMs) {
+  if (!val) return "rgba(100,116,139,0.12)";
+  const t = Math.min(val / maxMs, 1);
+  if (t < 0.5) {
+    const s = t * 2;
+    return `rgba(${Math.round(59 + s*(245-59))},${Math.round(130 + s*(158-130))},${Math.round(246 - s*246)},0.75)`;
+  } else {
+    const s = (t - 0.5) * 2;
+    return `rgba(${Math.round(245 + s*(239-245))},${Math.round(158 - s*(158-68))},${Math.round(s*68)},0.75)`;
+  }
+}
+
+function formatDuration(s) {
+  if (s < 60) return s.toFixed(0) + "s";
+  if (s < 3600) return (s / 60).toFixed(0) + "m";
+  return (s / 3600).toFixed(1) + "h";
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+function renderCharts(results, device) {
+  ["lat","jit","loss"].forEach(k => { if (charts[k]) { charts[k].destroy(); delete charts[k]; } });
+  const labels = results.map(r => new Date(r.timestamp + "Z").toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+  const base = {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false }, tooltip: { mode: "index", intersect: false } },
+    scales: {
+      x: { ticks: { color: "#64748b", maxTicksLimit: 8, font: { family: "IBM Plex Mono", size: 10 } }, grid: { color: "#1c2030" } },
+      y: { ticks: { color: "#64748b", font: { family: "IBM Plex Mono", size: 10 } }, grid: { color: "#1c2030" } }
+    }
+  };
+  const latT = device.thresholds && device.thresholds.latency_ms;
+  const maintAnnotations = getMaintenanceAnnotations(activeHours);
+  const latAnnotations = {};
+  if (latT) latAnnotations.t = { type: "line", yMin: latT, yMax: latT, borderColor: "rgba(239,68,68,0.6)", borderWidth: 1, borderDash: [5,5] };
+  maintAnnotations.forEach((a, i) => { latAnnotations["maint_" + i] = a; });
+  charts.lat = new Chart(document.getElementById("chart-latency"), {
+    type: "line",
+    data: { labels, datasets: [{ data: results.map(r => r.latency_ms), borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.07)", borderWidth: 1.5, pointRadius: 0, fill: true, spanGaps: true, tension: 0.3 }] },
+    options: { ...base, plugins: { ...base.plugins, annotation: { annotations: latAnnotations } } }
+  });
+  charts.jit = new Chart(document.getElementById("chart-jitter"), {
+    type: "line",
+    data: { labels, datasets: [{ data: results.map(r => r.jitter_ms), borderColor: "#06b6d4", backgroundColor: "rgba(6,182,212,0.07)", borderWidth: 1.5, pointRadius: 0, fill: true, spanGaps: true, tension: 0.3 }] },
+    options: base
+  });
+  const losses = results.map(r => r.success ? 1 : 0);
+  charts.loss = new Chart(document.getElementById("chart-loss"), {
+    type: "bar",
+    data: { labels, datasets: [{ data: losses, backgroundColor: losses.map(v => v ? "rgba(16,185,129,0.6)" : "rgba(239,68,68,0.7)"), borderWidth: 0, barPercentage: 1, categoryPercentage: 1 }] },
+    options: { ...base, scales: { ...base.scales, y: { ...base.scales.y, min: 0, max: 1, display: false } } }
+  });
+}
+
+// ── MTU discovery ─────────────────────────────────────────────────────────────
+async function discoverMtu(deviceId, host, force = false) {
+  if (!force && mtuCache[deviceId]) return;  // already have a result
+  // Show spinner in card
+  const valEl = document.getElementById("mtu-val-" + deviceId);
+  if (valEl) valEl.innerHTML = `<span style="color:var(--muted);font-size:12px">discovering…</span>`;
+  try {
+    const r = await api("/devices/" + deviceId + "/mtu-discover", "POST");
+    mtuCache[deviceId] = r;
+    // Update stat card
+    if (valEl) valEl.innerHTML = `${r.mtu_bytes}<span class="unit">B</span>`;
+    // Update traceroute table header label
+    const lblEl = document.getElementById("mtu-trace-label-" + deviceId);
+    if (lblEl) lblEl.textContent = `· Path MTU: ${r.mtu_bytes}B (payload ${r.payload_size}B)`;
+  } catch(e) {
+    if (valEl) valEl.innerHTML = `<span style="color:var(--danger);font-size:11px">failed</span>`;
+  }
+}
+
+// ── Traceroute view ───────────────────────────────────────────────────────────
+function renderLatBar(avg_ms, maxMs) {
+  if (avg_ms == null) return `<span style="color:var(--muted)">—</span>`;
+  const pct = Math.min(120, Math.round((avg_ms / maxMs) * 120));
+  const cls = avg_ms > 100 ? "crit" : avg_ms > 40 ? "warn" : "";
+  return `<div class="lat-bar-wrap"><div class="lat-bar ${cls}" style="width:${pct}px"></div><span style="font-family:var(--mono);font-size:11px">${avg_ms.toFixed(1)}ms</span></div>`;
+}
+
+function latTrend(last_ms, avg_ms) {
+  if (last_ms == null || avg_ms == null || avg_ms === 0) return "";
+  const delta = (last_ms - avg_ms) / avg_ms;
+  if (delta < -0.1) return ` <span style="color:var(--success);font-size:11px" title="Falling">↓</span>`;
+  if (delta >  0.1) return ` <span style="color:var(--danger);font-size:11px" title="Rising">↑</span>`;
+  return "";
+}
+
+function renderTracerouteView(device, hops, results, uptime, incidents, heatmap, histogram, sla, allAlerts) {
+  const view = document.getElementById("device-view");
+  view.className = "device-view visible";
+  const stats = hops.stats || [];
+  const latest = hops.latest || {};
+  const destStat = stats.length ? stats[stats.length - 1] : null;
+  const maxMs = Math.max(...stats.map(s => s.avg_ms).filter(Boolean), 1);
+  const lossC = destStat ? (destStat.loss_pct > 5 ? "c-danger" : destStat.loss_pct > 0 ? "c-warning" : "c-success") : "";
+  const latC = destStat && destStat.avg_ms > 100 ? "c-danger" : destStat && destStat.avg_ms > 40 ? "c-warning" : "c-success";
+  const uptimeC = uptime.uptime_pct < 95 ? "c-danger" : uptime.uptime_pct < 99 ? "c-warning" : "c-success";
+  const tsLabel = latest.timestamp ? fmtTime(latest.timestamp) : "no data yet";
+  const knownHops = prevTraceHops[device.id] || new Set();
+  const currentHopNums = new Set(stats.map(s => s.hop));
+  prevTraceHops[device.id] = currentHopNums;
+
+  // Route change detection: compare current hop IPs to previous render
+  const currentIpMap = new Map((latest.hops || []).map(h => [h.hop, h.ip]));
+  const prevIpMap = prevHopIps[device.id];
+  const routeChanged = prevIpMap != null && [...currentIpMap.entries()].some(([hop, ip]) => prevIpMap.get(hop) !== ip);
+  prevHopIps[device.id] = currentIpMap;
+
+  const notesHtml = device.notes ? `<div class="device-notes-display">${esc(device.notes)}</div>` : "";
+
+  const hopRows = stats.map(s => {
+    const lossCls = s.loss_pct >= 50 ? "loss-high" : s.loss_pct > 0 ? "loss-mid" : "";
+    const isNew = knownHops.size > 0 && !knownHops.has(s.hop);
+    const rowStyle = isNew ? ' style="background:rgba(16,185,129,0.12)"' : "";
+    const newBadge = isNew ? ` <span style="color:var(--success);font-size:10px;font-weight:600">NEW</span>` : "";
+    const trend = latTrend(s.last_ms, s.avg_ms);
+    return `<tr${rowStyle}>
+      <td>${s.hop}</td>
+      <td>${s.ip ? esc(s.ip) + newBadge + ` <button class="btn-sm" style="padding:1px 5px;font-size:9px" onclick="resolveIp('${esc(s.ip)}',this)" title="Reverse DNS">⇌</button><button class="btn-sm" style="padding:1px 5px;font-size:9px" onclick="geoLookup('${esc(s.ip)}',this)" title="Geo/ASN lookup">🌐</button>` : `<span style="color:var(--muted)">???</span>`}</td>
+      <td id="hop-as-${s.hop}" style="white-space:nowrap">…</td>
+      <td class="${lossCls}">${s.loss_pct}%</td>
+      <td>${s.sent}</td>
+      <td>${s.last_ms != null ? s.last_ms + "ms" + trend : "—"}</td>
+      <td>${s.avg_ms != null ? s.avg_ms + "ms" : "—"}</td>
+      <td>${s.min_ms != null ? s.min_ms + "ms" : "—"}</td>
+      <td>${s.max_ms != null ? s.max_ms + "ms" : "—"}</td>
+      <td>${s.jitter_ms != null ? `<span style="color:${s.jitter_ms > 10 ? "var(--danger)" : s.jitter_ms > 3 ? "var(--warning)" : "var(--muted)"}">${s.jitter_ms}ms</span>` : "—"}</td>
+      <td>${renderLatBar(s.avg_ms, maxMs)}</td>
+    </tr>`;
+  }).join("");
+
+  const da = allAlerts.filter(a => parseInt(a.device_id) === device.id).slice(-20).reverse();
+
+  view.innerHTML = `
+    <div class="view-header">
+      <div class="view-title">
+        <h1>${esc(device.name)}</h1>
+        <div class="host-label">${esc(device.host)} &middot; traceroute &middot; every ${device.interval_sec}s</div>
+        ${notesHtml}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <div class="time-range">
+          <button class="time-btn ${activeHours===1?"active":""}" data-hours="1" onclick="setTimeRange(1)">1h</button>
+          <button class="time-btn ${activeHours===6?"active":""}" data-hours="6" onclick="setTimeRange(6)">6h</button>
+          <button class="time-btn ${activeHours===24?"active":""}" data-hours="24" onclick="setTimeRange(24)">24h</button>
+        </div>
+        <div style="display:flex;gap:6px">
+          <a class="btn-sm" href="/api/devices/${device.id}/export.csv" download style="text-decoration:none">⬇ Export</a>
+          <button class="btn-sm" onclick="pingNow(${device.id})">↺ Ping Now</button>
+        </div>
+      </div>
+    </div>
+    <div class="stat-grid-6">
+      <div class="stat-card ${lossC}"><label>Dest Loss</label><div class="value">${destStat ? destStat.loss_pct : "—"}<span class="unit">%</span></div></div>
+      <div class="stat-card ${latC}"><label>Dest Avg</label><div class="value">${destStat && destStat.avg_ms != null ? destStat.avg_ms : "—"}<span class="unit">ms</span></div></div>
+      <div class="stat-card"><label>Dest Best</label><div class="value">${destStat && destStat.min_ms != null ? destStat.min_ms : "—"}<span class="unit">ms</span></div></div>
+      <div class="stat-card"><label>Dest Worst</label><div class="value">${destStat && destStat.max_ms != null ? destStat.max_ms : "—"}<span class="unit">ms</span></div></div>
+      <div class="stat-card"><label>Hops</label><div class="value">${stats.length || "—"}</div></div>
+      <div class="stat-card ${uptimeC}"><label>Uptime 24h</label><div class="value">${uptime.uptime_pct ?? "—"}<span class="unit">%</span></div></div>
+      <div class="stat-card" id="mtu-card-${device.id}" style="cursor:pointer" onclick="discoverMtu(${device.id},'${esc(device.host)}',true)" title="Click to re-run MTU discovery"><label>Path MTU ↻</label><div class="value" id="mtu-val-${device.id}" style="font-size:16px">${mtuCache[device.id] ? mtuCache[device.id].mtu_bytes+"<span class='unit'>B</span>" : "<span style='color:var(--muted);font-size:13px'>…</span>"}</div></div>
+    </div>
+    <div id="as-path-container"></div>
+    <div class="hop-table-wrap">
+      <div class="section-head">Route — last run: ${tsLabel} ${routeChanged ? '<span class="route-badge">⚠ Route Changed</span>' : ""} <span id="mtu-trace-label-${device.id}" style="font-weight:400;color:var(--muted)">${mtuCache[device.id] ? "· Path MTU: "+mtuCache[device.id].mtu_bytes+"B (payload "+mtuCache[device.id].payload_size+"B)" : ""}</span></div>
+      ${stats.length
+        ? `<table class="hop-table" id="hop-table-main">
+            <thead><tr><th>#</th><th>Host</th><th>AS / Org</th><th>Loss%</th><th>Snt</th><th>Last</th><th>Avg</th><th>Best</th><th>Worst</th><th>Jitter</th><th>Latency</th></tr></thead>
+            <tbody>${hopRows}</tbody>
+           </table>`
+        : `<div class="no-data">No traceroute data yet — first run in progress.</div>`}
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card full" ondblclick="openFsOverlay('chart-latency','Destination latency over time')" style="cursor:zoom-in"><div class="chart-label">Destination latency over time <span style="font-weight:400;font-size:10px;color:var(--muted)">(dbl-click to expand)</span></div><div class="chart-wrap"><canvas id="chart-latency"></canvas></div></div>
+      <div class="chart-card" ondblclick="openFsOverlay('chart-jitter','Jitter')" style="cursor:zoom-in"><div class="chart-label">Jitter</div><div class="chart-wrap"><canvas id="chart-jitter"></canvas></div></div>
+      <div class="chart-card" ondblclick="openFsOverlay('chart-loss','Success / Failure')" style="cursor:zoom-in"><div class="chart-label">Success / Failure</div><div class="chart-wrap"><canvas id="chart-loss"></canvas></div></div>
+    </div>
+    <div class="chart-card" style="margin-bottom:20px" ondblclick="openFsOverlay('chart-histogram','Latency Distribution')">
+      <div class="chart-label">Latency Distribution <span style="font-weight:400;font-size:10px;color:var(--muted)">(double-click to expand)</span></div>
+      <div class="chart-wrap"><canvas id="chart-histogram"></canvas></div>
+    </div>
+    ${renderSlaSection(sla)}
+    ${renderIncidentTable(incidents)}
+    ${renderHeatmapSection(heatmap)}
+    <div class="alert-log">
+      <div class="section-head">Recent Alerts</div>
+      ${da.length
+        ? `<table class="data-table"><thead><tr><th>Time</th><th>Type</th><th>Value</th><th>Threshold</th></tr></thead><tbody>${
+            da.map(a => `<tr><td>${fmtTime(a.timestamp)}</td><td><span class="alert-type ${a.alert_type}">${a.alert_type.replace(/_/g," ")}</span></td><td>${parseFloat(a.value).toFixed(1)}ms</td><td>${parseFloat(a.threshold).toFixed(1)}ms</td></tr>`).join("")
+          }</tbody></table>`
+        : `<div class="no-data">No alerts triggered.</div>`}
+    </div>`;
+  renderCharts(results, device);
+  if (stats.length) enrichHopTable(stats);
+}
+
+// ── AS-path helpers ───────────────────────────────────────────────────────────
+function _renderGeoCell(cell, geo) {
+  if (geo && geo.org) {
+    const asn = geo.org.split(" ")[0];
+    const orgName = geo.org.replace(asn, "").trim();
+    cell.innerHTML = `<span style="color:var(--accent);font-family:var(--mono);font-size:10px">${asn}</span> <span style="color:var(--muted);font-size:10px">${orgName.slice(0,25)}</span>`;
+  } else {
+    cell.textContent = "—";
+  }
+}
+
+async function enrichHopTable(hops) {
+  // Fill cells from cache immediately (synchronous, no flicker)
+  for (const h of hops) {
+    if (!h.ip || !(h.ip in _geoCache)) continue;
+    const cell = document.getElementById("hop-as-" + h.hop);
+    if (cell) _renderGeoCell(cell, _geoCache[h.ip]);
+  }
+
+  // Fetch only IPs not yet in cache, in parallel
+  const uncached = hops.filter(h => h.ip && !(h.ip in _geoCache));
+  await Promise.all(uncached.map(async h => {
+    try {
+      const geo = await api("/geo?ip=" + h.ip);
+      _geoCache[h.ip] = geo;
+      const cell = document.getElementById("hop-as-" + h.hop);
+      if (cell) _renderGeoCell(cell, geo);
+    } catch {
+      _geoCache[h.ip] = null;
+      const cell = document.getElementById("hop-as-" + h.hop);
+      if (cell) cell.textContent = "—";
+    }
+  }));
+
+  const container = document.getElementById("as-path-container");
+  if (container) container.innerHTML = renderAsPath(hops, _geoCache);
+}
+
+function renderAsPath(hops, geoCache) {
+  const asns = [];
+  for (const h of hops) {
+    const geo = geoCache[h.ip];
+    if (!geo?.org) continue;
+    const asn = geo.org.split(" ")[0];
+    if (!asns.length || asns[asns.length - 1].asn !== asn) {
+      asns.push({ asn, org: geo.org.replace(asn, "").trim().slice(0, 25), country: geo.country });
+    }
+  }
+  if (!asns.length) return "";
+  return `<div class="table-card" style="margin-bottom:16px">
+    <div class="section-head">AS Path</div>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:12px">
+      ${asns.map((a, i) => `
+        <span style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:11px;font-family:var(--mono)">
+          <span style="color:var(--accent)">${a.asn}</span>
+          <span style="color:var(--muted)"> ${a.org}</span>
+          ${a.country ? `<span style="font-size:10px"> ${a.country}</span>` : ""}
+        </span>
+        ${i < asns.length - 1 ? '<span style="color:var(--muted)">→</span>' : ""}
+      `).join("")}
+    </div>
+  </div>`;
+}
+
+// ── Ping Now ──────────────────────────────────────────────────────────────────
+async function pingNow(deviceId) {
+  try {
+    await api("/devices/" + deviceId + "/ping-now", "POST");
+    toast("Probe restarted — refreshing in 3s…");
+    setTimeout(() => loadDeviceData(deviceId), 3000);
+  } catch(e) { toast("Ping Now failed: " + e.message, "error"); }
+}
+
+// ── Sidebar filter ────────────────────────────────────────────────────────────
+function filterSidebar() {
+  renderSidebar();
+}
+
+// ── Histogram chart ───────────────────────────────────────────────────────────
+function renderHistogramChart(histogram) {
+  if (charts.hist) { charts.hist.destroy(); delete charts.hist; }
+  const ctx = document.getElementById("chart-histogram");
+  if (!ctx) return;
+  if (!histogram || !histogram.length) {
+    ctx.style.display = "none";
+    ctx.insertAdjacentHTML("afterend", '<div class="no-data" id="hist-no-data">Not enough data yet — histogram will appear once more probes are collected.</div>');
+    return;
+  }
+  ctx.style.display = "";
+  const nd = document.getElementById("hist-no-data");
+  if (nd) nd.remove();
+  const counts = histogram.map(b => b.count);
+  const maxCount = Math.max(...counts, 1);
+  charts.hist = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: histogram.map(b => b.label + "ms"),
+      datasets: [{
+        data: counts,
+        backgroundColor: counts.map(c => {
+          const t = c / maxCount;
+          return `rgba(${Math.round(59+t*180)},${Math.round(130-t*60)},${Math.round(246-t*200)},0.75)`;
+        }),
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.raw + " samples" } } },
+      scales: {
+        x: { ticks: { color: "#64748b", font: { family: "IBM Plex Mono", size: 10 }, maxRotation: 45 }, grid: { color: "#1c2030" } },
+        y: { ticks: { color: "#64748b", font: { family: "IBM Plex Mono", size: 10 } }, grid: { color: "#1c2030" }, title: { display: true, text: "samples", color: "#64748b", font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ── SLA section ───────────────────────────────────────────────────────────────
+function renderSlaSection(slaData) {
+  if (!slaData || !slaData.length) {
+    return `<div class="table-card" style="margin-bottom:20px"><div class="section-head">30-Day SLA</div><div class="no-data">No SLA data yet.</div></div>`;
+  }
+  const hasAny = slaData.some(d => d.total > 0);
+  const overallUp = slaData.reduce((a, d) => a + d.up, 0);
+  const overallTotal = slaData.reduce((a, d) => a + d.total, 0);
+  const overallPct = overallTotal ? (overallUp / overallTotal * 100).toFixed(3) : "—";
+  const cells = slaData.map(d => {
+    let cls = "sla-none";
+    if (d.uptime_pct !== null) {
+      if (d.uptime_pct >= 99.9) cls = "sla-up";
+      else if (d.uptime_pct >= 95) cls = "sla-warn";
+      else cls = "sla-down";
+    }
+    return `<div class="sla-cell ${cls}" title="${d.date}: ${d.uptime_pct !== null ? d.uptime_pct+"%" : "no data"} (${d.up}/${d.total} probes)"></div>`;
+  }).join("");
+  return `<div class="table-card" style="margin-bottom:20px">
+    <div class="section-head">30-Day SLA <span style="font-weight:400;color:${overallPct >= 99.9 ? "var(--success)" : overallPct >= 95 ? "var(--warning)" : "var(--danger)"}">${overallPct}%</span>
+      <span style="font-weight:400;font-size:10px;color:var(--muted);margin-left:8px">
+        <span style="display:inline-block;width:10px;height:10px;background:var(--success);border-radius:2px;opacity:.75"></span> ≥99.9%
+        <span style="display:inline-block;width:10px;height:10px;background:var(--warning);border-radius:2px;opacity:.75;margin-left:6px"></span> ≥95%
+        <span style="display:inline-block;width:10px;height:10px;background:var(--danger);border-radius:2px;opacity:.75;margin-left:6px"></span> &lt;95%
+      </span>
+    </div>
+    <div class="sla-grid">${cells}</div>
+  </div>`;
+}
+
+// ── Geo lookup ────────────────────────────────────────────────────────────────
+async function geoLookup(ip, btn) {
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    const r = await api("/geo?ip=" + encodeURIComponent(ip));
+    const parts = [r.country, r.city, r.org].filter(Boolean);
+    const label = parts.join(" · ") || "unknown";
+    btn.insertAdjacentHTML("afterend", `<span class="geo-inline" title="${esc(label)}">${esc(r.country || "?")} ${esc(r.org ? r.org.replace(/^AS\d+ /,"") : "")}</span>`);
+    btn.remove();
+  } catch(e) { btn.textContent = "err"; btn.disabled = false; }
+}
+
+// ── Fullscreen chart ──────────────────────────────────────────────────────────
+function openFsOverlay(canvasId, label) {
+  const srcChart = Object.values(charts).find(c => c.canvas && c.canvas.id === canvasId);
+  if (!srcChart) return;
+  document.getElementById("fs-label").textContent = label;
+  document.getElementById("fs-overlay").classList.add("open");
+  if (fsChart) { fsChart.destroy(); fsChart = null; }
+  fsChart = new Chart(document.getElementById("fs-canvas"), {
+    type: srcChart.config.type,
+    data: srcChart.config.data,
+    options: { ...srcChart.config.options, responsive: true, maintainAspectRatio: false, animation: false }
+  });
+}
+function closeFsOverlayBtn() {
+  document.getElementById("fs-overlay").classList.remove("open");
+  if (fsChart) { fsChart.destroy(); fsChart = null; }
+}
+function closeFsOverlay(e) { if (e.target === e.currentTarget) closeFsOverlayBtn(); }
+
+// ── DNS Resolve ───────────────────────────────────────────────────────────────
+async function resolveIp(ip, btn) {
+  btn.disabled = true;
+  btn.textContent = "...";
+  try {
+    const r = await api("/resolve?ip=" + encodeURIComponent(ip));
+    if (r.hostname) {
+      btn.closest("td").innerHTML = `${esc(ip)}<br><span style="color:var(--muted);font-size:10px">${esc(r.hostname)}</span>`;
+    } else {
+      btn.textContent = "N/A";
+    }
+  } catch(e) { btn.textContent = "err"; btn.disabled = false; }
+}
+
+// ── Compare tab ───────────────────────────────────────────────────────────────
+function renderCompareDeviceList() {
+  const el = document.getElementById("compare-device-list");
+  if (!devices.length) { el.innerHTML = `<p style="color:var(--muted);font-size:13px">No devices to compare.</p>`; return; }
+  el.innerHTML = devices.map((d, i) =>
+    `<label class="compare-check-label" style="border-left:3px solid ${PALETTE[i % PALETTE.length]}">
+      <input type="checkbox" class="compare-check" value="${d.id}" />
+      <span>${esc(d.name)}</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${esc(d.host)}</span>
+    </label>`
+  ).join("");
+}
+
+async function loadCompare() {
+  const checks = [...document.querySelectorAll(".compare-check:checked")].map(c => c.value);
+  if (!checks.length) { toast("Select at least one device.", "error"); return; }
+  const hours = parseInt(document.getElementById("compare-hours").value);
+  try {
+    const data = await api("/compare?ids=" + checks.join(",") + "&hours=" + hours);
+    renderCompareChart(data, checks, hours);
+  } catch(e) { toast("Compare failed: " + e.message, "error"); }
+}
+
+function renderCompareChart(data, deviceIds, hours) {
+  if (charts.compare) { charts.compare.destroy(); delete charts.compare; }
+  const N = 120;
+  // Build a unified sorted timestamp list from all devices
+  const allTs = [...new Set(deviceIds.flatMap(id => (data[id] || []).map(r => r.timestamp)))].sort();
+  const labels = allTs.length <= N
+    ? allTs
+    : Array.from({length: N}, (_, j) => allTs[Math.floor(j * allTs.length / N)]);
+  const labelSet = new Set(labels);
+  const datasets = deviceIds.map((id, i) => {
+    const d = devices.find(dv => dv.id == id);
+    const rows = (data[id] || []).filter(r => labelSet.has(r.timestamp));
+    const byTs = Object.fromEntries(rows.map(r => [r.timestamp, r.latency_ms]));
+    return {
+      label: d ? d.name : "Device " + id,
+      data: labels.map(ts => byTs[ts] ?? null),
+      borderColor: PALETTE[i % PALETTE.length],
+      backgroundColor: "transparent",
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3,
+      spanGaps: true,
+    };
+  });
+  const ctx = document.getElementById("chart-compare");
+  if (!ctx) return;
+  charts.compare = new Chart(ctx, {
+    type: "line",
+    data: { labels: labels.map(ts => ts.slice(11, 16)), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: true, labels: { color: "#e2e8f0", font: { family: "IBM Plex Mono", size: 11 } } }, tooltip: { mode: "index", intersect: false } },
+      scales: {
+        x: { ticks: { color: "#64748b", maxTicksLimit: 10, font: { family: "IBM Plex Mono", size: 10 } }, grid: { color: "#1c2030" } },
+        y: { ticks: { color: "#64748b", font: { family: "IBM Plex Mono", size: 10 } }, grid: { color: "#1c2030" }, title: { display: true, text: "ms", color: "#64748b", font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+let leafletMap = null;
+let mapLayers = [];
+
+async function loadMap() {
+  const statusEl = document.getElementById("map-status");
+  if (statusEl) statusEl.textContent = "Loading geo data…";
+
+  // Init map once
+  if (!leafletMap) {
+    const container = document.getElementById("map-container");
+    if (!container) return;
+    leafletMap = L.map("map-container", { center: [30, 0], zoom: 2 });
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: "© OpenStreetMap © CARTO",
+      maxZoom: 19
+    }).addTo(leafletMap);
+  }
+
+  // Clear old layers
+  for (const layer of mapLayers) leafletMap.removeLayer(layer);
+  mapLayers = [];
+
+  const traceDevices = devices.filter(d => d.probe_type === "traceroute");
+  if (!traceDevices.length) {
+    if (statusEl) statusEl.textContent = "No traceroute devices — add one to see the route map.";
+    return;
+  }
+
+  let totalPins = 0;
+
+  for (let di = 0; di < traceDevices.length; di++) {
+    const d = traceDevices[di];
+    const color = PALETTE[di % PALETTE.length];
+    try {
+      const hopsData = await api("/devices/" + d.id + "/hops");
+      const hops = (hopsData.latest && hopsData.latest.hops) ? hopsData.latest.hops : [];
+      const hopIps = [...new Set(hops.map(h => h.ip).filter(Boolean))];
+      const geoPoints = [];
+
+      for (const ip of hopIps) {
+        try {
+          const geo = await api("/geo?ip=" + ip);
+          if (!geo.loc) continue;
+          const [lat, lng] = geo.loc.split(",").map(parseFloat);
+          if (isNaN(lat) || isNaN(lng)) continue;
+          geoPoints.push({ ip, lat, lng, ...geo });
+        } catch { continue; }
+      }
+
+      if (geoPoints.length >= 2) {
+        const latlngs = geoPoints.map(p => [p.lat, p.lng]);
+        const line = L.polyline(latlngs, { color, weight: 2, opacity: 0.7, dashArray: "4 4" }).addTo(leafletMap);
+        mapLayers.push(line);
+      }
+
+      for (const p of geoPoints) {
+        const marker = L.circleMarker([p.lat, p.lng], {
+          radius: 5, color, fillColor: color, fillOpacity: 0.8, weight: 1.5
+        }).addTo(leafletMap);
+        marker.bindPopup(`<b>${p.ip}</b><br>${p.city || ""}${p.city ? ", " : ""}${p.country || ""}<br><span style="color:#64748b">${p.org || ""}</span>`);
+        mapLayers.push(marker);
+        totalPins++;
+      }
+    } catch(e) {
+      console.warn("Map: failed to load hops for device", d.id, e);
+    }
+  }
+
+  if (statusEl) statusEl.textContent = totalPins
+    ? totalPins + " hop location" + (totalPins === 1 ? "" : "s") + " plotted across " + traceDevices.length + " route" + (traceDevices.length === 1 ? "" : "s")
+    : "No geo data available — hop IPs may be private/unresolvable.";
+}
+
+// ── Topology ──────────────────────────────────────────────────────────────────
+async function loadTopology() {
+  const container = document.getElementById("topo-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const traceDevices = devices.filter(d => d.probe_type === "traceroute");
+  if (!traceDevices.length) {
+    container.innerHTML = `<div class="no-data" style="padding:40px">No traceroute devices — add one to see topology.</div>`;
+    return;
+  }
+
+  const nodeMap = new Map();
+  const edgeMap = new Map();
+
+  nodeMap.set("origin", { id: "origin", label: "You", type: "origin", hop_count: 0, devices: [] });
+
+  for (let di = 0; di < traceDevices.length; di++) {
+    const d = traceDevices[di];
+    try {
+      const hopsData = await api("/devices/" + d.id + "/hops");
+      const hops = hopsData.stats || [];
+      const sorted = [...hops].sort((a, b) => a.hop - b.hop);
+      let prev = "origin";
+
+      for (const h of sorted) {
+        const ip = h.ip || ("unknown-" + h.hop);
+        if (!nodeMap.has(ip)) nodeMap.set(ip, {
+          id: ip, label: ip, type: "hop", hop_count: 0, devices: [],
+          hop_num: h.hop,
+          _avg_sum: 0, _avg_count: 0,
+          _jitter_sum: 0, _jitter_count: 0,
+          loss_pct: 0,
+        });
+        const n = nodeMap.get(ip);
+        n.hop_count++;
+        if (!n.devices.includes(d.name)) n.devices.push(d.name);
+
+        if (h.avg_ms != null)    { n._avg_sum    += h.avg_ms;    n._avg_count++; }
+        if (h.jitter_ms != null) { n._jitter_sum += h.jitter_ms; n._jitter_count++; }
+        if (h.loss_pct > n.loss_pct) n.loss_pct = h.loss_pct;
+
+        const ek = prev + "->" + ip;
+        if (!edgeMap.has(ek)) edgeMap.set(ek, { source: prev, target: ip, count: 0 });
+        edgeMap.get(ek).count++;
+        prev = ip;
+      }
+
+      const dest = d.host;
+      if (!nodeMap.has(dest)) nodeMap.set(dest, { id: dest, label: dest, type: "destination", hop_count: 0, devices: [d.name] });
+    } catch(e) { console.warn("Topology: failed for device", d.id, e); }
+  }
+
+  // Pass 2: convert running sums to averages, clean up scratch fields
+  for (const n of nodeMap.values()) {
+    if (n.type !== "hop") continue;
+    n.avg_ms    = n._avg_count    > 0 ? Math.round(n._avg_sum    / n._avg_count    * 10) / 10 : null;
+    n.jitter_ms = n._jitter_count > 0 ? Math.round(n._jitter_sum / n._jitter_count * 10) / 10 : null;
+    delete n._avg_sum; delete n._avg_count;
+    delete n._jitter_sum; delete n._jitter_count;
+  }
+
+  renderTopologyGraph(container, [...nodeMap.values()], [...edgeMap.values()], traceDevices.length);
+}
+
+function renderTopologyGraph(container, nodes, edges, deviceCount) {
+  const width = container.clientWidth || 900;
+  const height = container.clientHeight || 500;
+  const tooltip = document.getElementById("topo-tooltip");
+
+  const svg = d3.select(container)
+    .append("svg")
+    .attr("width", width)
+    .attr("height", height)
+    .style("background", "var(--bg)");
+
+  const g = svg.append("g");
+
+  svg.call(d3.zoom().scaleExtent([0.3, 4]).on("zoom", e => g.attr("transform", e.transform)));
+
+  const sim = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(edges).id(d => d.id).distance(80))
+    .force("charge", d3.forceManyBody().strength(-200))
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("collision", d3.forceCollide(20));
+
+  const link = g.append("g")
+    .selectAll("line")
+    .data(edges)
+    .join("line")
+    .attr("stroke", d => d.count > 1 ? "#3b82f6" : "#334155")
+    .attr("stroke-width", d => Math.min(d.count * 1.5, 5))
+    .attr("stroke-opacity", 0.6);
+
+  const nodeColor = d => {
+    if (d.type === "origin") return "#10b981";
+    if (d.type === "destination") return "#3b82f6";
+    return d.hop_count > 1 ? "#f59e0b" : "#475569";
+  };
+
+  const nodeRadius = d => d.type === "origin" ? 10 : d.type === "destination" ? 8 : Math.min(4 + d.hop_count * 2, 12);
+
+  const node = g.append("g")
+    .selectAll("circle")
+    .data(nodes)
+    .join("circle")
+    .attr("r", d => nodeRadius(d))
+    .attr("fill", nodeColor)
+    .attr("stroke", "#0d0f12")
+    .attr("stroke-width", 1.5)
+    .style("cursor", "pointer")
+    .call(d3.drag()
+      .on("start", (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on("end", (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }))
+    .on("mouseover", (e, d) => {
+      if (!tooltip) return;
+      tooltip.style.display = "block";
+      tooltip.style.left = (e.clientX + 12) + "px";
+      tooltip.style.top = (e.clientY - 10) + "px";
+      let html = `<b>${esc(d.label)}</b>`;
+      if (d.type === "hop") {
+        const parts = [];
+        if (d.avg_ms    != null) parts.push(`Avg: ${d.avg_ms}ms`);
+        if (d.jitter_ms != null) parts.push(`Jitter: ${d.jitter_ms}ms`);
+        const lossStr = d.loss_pct > 0
+          ? `Loss: <span style="color:var(--warning)">${d.loss_pct}%</span>`
+          : `Loss: 0%`;
+        parts.push(lossStr);
+        html += `<br>${parts.join("&ensp;")}`;
+      }
+      if (d.devices.length) html += `<br>Routes: ${d.devices.map(esc).join(", ")}`;
+      if (d.hop_count > 1)  html += `<br><span style="color:var(--warning)">Shared hop (${d.hop_count} routes)</span>`;
+      tooltip.innerHTML = html;
+    })
+    .on("mouseout", () => { if (tooltip) tooltip.style.display = "none"; });
+
+  const hopLabel = d => {
+    if (d.type !== "hop") return d.label;
+    return d.id.startsWith("unknown-") ? String(d.hop_num) : d.hop_num + " · " + d.id;
+  };
+
+  const label = g.append("g")
+    .selectAll("text")
+    .data(nodes)
+    .join("text")
+    .text(hopLabel)
+    .attr("font-size", 10)
+    .attr("fill", "#94a3b8")
+    .attr("text-anchor", "middle")
+    .attr("dy", d => -(nodeRadius(d) + 6))
+    .style("font-family", "IBM Plex Mono")
+    .style("pointer-events", "none");
+
+  sim.on("tick", () => {
+    link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+    node.attr("cx", d => d.x).attr("cy", d => d.y);
+    label.attr("x", d => d.x).attr("y", d => d.y);
+  });
+}
+
+// ── Speedtest ─────────────────────────────────────────────────────────────────
+async function loadSpeedtest() {
+  const hours = parseInt(document.getElementById("speedtest-hours")?.value || 168);
+  const results = await api("/speedtest/results?hours=" + hours);
+  renderSpeedtestCharts(results);
+  renderSpeedtestStats(results);
+  renderSpeedtestHistory(results);
+}
+
+async function runSpeedtest() {
+  toast("Running speedtest — this may take 30-60 seconds...");
+  try {
+    const result = await api("/speedtest/run", "POST");
+    if (result.error) { toast("Speedtest failed: " + result.error, "error"); return; }
+    toast(`↓${result.download_mbps} Mbps  ↑${result.upload_mbps} Mbps  ping:${result.ping_ms}ms`);
+    loadSpeedtest();
+  } catch(e) { toast("Speedtest failed: " + e.message, "error"); }
+}
+
+function renderSpeedtestStats(results) {
+  const el = document.getElementById("speedtest-stats");
+  if (!el) return;
+  if (!results.length) { el.innerHTML = `<div class="no-data" style="grid-column:1/-1">No speedtest data yet. Click "Run Now".</div>`; return; }
+  const last = results[results.length - 1];
+  const avgDl = (results.reduce((a,r) => a + r.download_mbps, 0) / results.length).toFixed(1);
+  const avgUl = (results.reduce((a,r) => a + r.upload_mbps, 0) / results.length).toFixed(1);
+  el.innerHTML = [
+    ["Last Download", last.download_mbps + " Mbps"],
+    ["Last Upload", last.upload_mbps + " Mbps"],
+    ["Avg Download", avgDl + " Mbps"],
+    ["ISP", last.isp || "—"],
+  ].map(([label, val]) => `<div class="stat-card"><label>${label}</label><div class="value" style="font-size:18px">${val}</div></div>`).join("");
+}
+
+function renderSpeedtestCharts(results) {
+  if (charts.stBw) { charts.stBw.destroy(); delete charts.stBw; }
+  if (charts.stPing) { charts.stPing.destroy(); delete charts.stPing; }
+  if (!results.length) return;
+  const labels = results.map(r => r.timestamp.slice(5,16).replace("T"," "));
+  const ctxBw = document.getElementById("chart-speedtest-bw");
+  const ctxPing = document.getElementById("chart-speedtest-ping");
+  if (ctxBw) charts.stBw = new Chart(ctxBw, {
+    type: "line",
+    data: { labels, datasets: [
+      { label: "Download", data: results.map(r => r.download_mbps), borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.08)", borderWidth: 2, pointRadius: 3, fill: true },
+      { label: "Upload", data: results.map(r => r.upload_mbps), borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.08)", borderWidth: 2, pointRadius: 3, fill: true },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: true, labels: { color: "#e2e8f0" } } }, scales: { x: { ticks: { color: "#64748b", maxTicksLimit: 8, font: { family: "IBM Plex Mono", size: 10 } }, grid: { color: "#1c2030" } }, y: { ticks: { color: "#64748b" }, grid: { color: "#1c2030" }, title: { display: true, text: "Mbps", color: "#64748b" } } } }
+  });
+  if (ctxPing) charts.stPing = new Chart(ctxPing, {
+    type: "line",
+    data: { labels, datasets: [{ label: "Ping", data: results.map(r => r.ping_ms), borderColor: "#f59e0b", backgroundColor: "rgba(245,158,11,0.08)", borderWidth: 1.5, pointRadius: 3, fill: true }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: "#64748b", maxTicksLimit: 8, font: { family: "IBM Plex Mono", size: 10 } }, grid: { color: "#1c2030" } }, y: { ticks: { color: "#64748b" }, grid: { color: "#1c2030" }, title: { display: true, text: "ms", color: "#64748b" } } } }
+  });
+}
+
+function renderSpeedtestHistory(results) {
+  const el = document.getElementById("speedtest-history");
+  if (!el) return;
+  if (!results.length) { el.innerHTML = `<div class="no-data">No history yet.</div>`; return; }
+  el.innerHTML = `<table class="data-table"><thead><tr><th>Time</th><th>Download</th><th>Upload</th><th>Ping</th><th>Server</th><th>ISP</th></tr></thead><tbody>` +
+    [...results].reverse().map(r => `<tr>
+      <td style="font-family:var(--mono);font-size:11px">${r.timestamp.slice(0,19).replace("T"," ")}</td>
+      <td style="font-family:var(--mono)">${r.download_mbps} Mbps</td>
+      <td style="font-family:var(--mono)">${r.upload_mbps} Mbps</td>
+      <td style="font-family:var(--mono)">${r.ping_ms} ms</td>
+      <td>${r.server}</td>
+      <td>${r.isp}</td>
+    </tr>`).join("") +
+    `</tbody></table>`;
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+async function loadReport() {
+  const hours = parseInt(document.getElementById("report-hours").value);
+  const [reportData, alerts, events] = await Promise.all([api("/report?hours=" + hours), api("/alerts"), api("/events")]);
+  const grid = document.getElementById("report-grid");
+  if (!reportData.length) {
+    grid.innerHTML = `<p style="color:var(--muted);font-size:13px">No devices to report on.</p>`;
+  } else {
+    grid.innerHTML = reportData.map(d => {
+      const latC = d.avg_latency > 100 ? "bad" : d.avg_latency > 50 ? "warn" : "good";
+      const lossC = d.loss_pct > 5 ? "bad" : d.loss_pct > 1 ? "warn" : "good";
+      return `<div class="rdc">
+        <div class="rdc-top">
+          <div><div class="rdc-name">${esc(d.name)}</div><div class="rdc-host">${esc(d.host)}</div></div>
+          <span class="status-badge ${d.status || "unknown"}">${d.status || "unknown"}</span>
+        </div>
+        <div class="rdc-stats">
+          <div class="rdc-stat"><label>Avg Latency</label><div class="rdc-val ${latC}">${d.avg_latency != null ? d.avg_latency + "ms" : "&mdash;"}</div></div>
+          <div class="rdc-stat"><label>Packet Loss</label><div class="rdc-val ${lossC}">${d.loss_pct != null ? d.loss_pct + "%" : "&mdash;"}</div></div>
+          <div class="rdc-stat"><label>Min / Max</label><div class="rdc-val" style="font-size:13px">${d.min_latency ?? "&mdash;"} / ${d.max_latency ?? "&mdash;"} ms</div></div>
+          <div class="rdc-stat"><label>Avg Jitter</label><div class="rdc-val">${d.avg_jitter != null ? d.avg_jitter + "ms" : "&mdash;"}</div></div>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  const tbody = document.getElementById("report-alert-body");
+  const recent = alerts.slice(-50).reverse();
+  tbody.innerHTML = recent.length
+    ? recent.map(a => `<tr><td>${fmtTime(a.timestamp)}</td><td>${esc(a.device_name)}</td><td><span class="alert-type ${a.alert_type}">${a.alert_type.replace(/_/g," ")}</span></td><td>${parseFloat(a.value || 0).toFixed(1)}ms</td><td>${parseFloat(a.threshold || 0).toFixed(1)}ms</td></tr>`).join("")
+    : `<tr><td colspan="5" class="no-data">No alerts recorded.</td></tr>`;
+  renderNetworkEvents(events);
+  loadDigestPreview();
+}
+
+async function loadDigestPreview() {
+  const hours = parseInt(document.getElementById("report-hours").value);
+  const d = await api("/digest?hours=" + hours);
+  // Simple text preview
+  const lines = [
+    `Period: last ${d.period_hours}h  |  Devices: ${d.devices.length}  |  Alerts: ${d.recent_alerts.length}`,
+    "",
+    ...d.devices.map(dev =>
+      `${dev.name.padEnd(20)} uptime:${(dev.uptime_pct?.toFixed(1) ?? "—").padStart(6)}%  avg:${(dev.avg_latency?.toFixed(1) ?? "—").padStart(7)}ms  loss:${(dev.loss_pct?.toFixed(1) ?? "—").padStart(5)}%  incidents:${dev.incidents}`
+    )
+  ];
+  document.getElementById("digest-preview").textContent = lines.join("\n");
+}
+
+async function sendDigest() {
+  const hours = parseInt(document.getElementById("report-hours").value);
+  await api("/digest/send?hours=" + hours, "POST");
+  toast("Digest sent via configured channels.");
+}
+
+function renderNetworkEvents(events) {
+  const el = document.getElementById("network-events");
+  if (!el) return;
+  if (!events.length) { el.innerHTML = `<div class="no-data">No correlated network events yet.</div>`; return; }
+  el.innerHTML = `<table class="data-table"><thead><tr><th>Time</th><th>Type</th><th>Devices</th><th>Count</th></tr></thead><tbody>` +
+    events.map(e => `<tr>
+      <td style="font-family:var(--mono);font-size:11px">${e.ts.slice(0,19).replace("T"," ")}</td>
+      <td><span class="alert-type ${e.type}">${e.type.replace(/_/g," ")}</span></td>
+      <td style="font-size:12px">${e.device_names.join(", ")}</td>
+      <td style="font-family:var(--mono)">${e.count}</td>
+    </tr>`).join("") +
+    `</tbody></table>`;
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+async function loadSettings() {
+  const s = await api("/settings");
+  document.getElementById("s-webhook").value = s.slack_webhook_url || "";
+  document.getElementById("s-cooldown").value = s.cooldown_sec ?? 300;
+  document.getElementById("s-interval").value = s.default_interval_sec ?? 5;
+  document.getElementById("s-retention").value = s.retention_days ?? 30;
+  document.getElementById("s-custom-webhook").value = s.webhook_url || "";
+  document.getElementById("s-discord-webhook").value = s.discord_webhook_url || "";
+  document.getElementById("s-teams-webhook").value = s.teams_webhook_url || "";
+  document.getElementById("s-smtp-host").value = s.smtp_host || "";
+  document.getElementById("s-smtp-port").value = s.smtp_port || 587;
+  document.getElementById("s-smtp-user").value = s.smtp_user || "";
+  document.getElementById("s-smtp-pass").value = s.smtp_pass || "";
+  document.getElementById("s-smtp-from").value = s.smtp_from || "";
+  document.getElementById("s-smtp-to").value = s.smtp_to || "";
+  document.getElementById("s-email-enabled").checked = !!s.email_alerts_enabled;
+  document.getElementById("s-digest-interval").value = s.digest_interval_hours ?? 0;
+  renderGroupsList();
+}
+
+async function saveSection(section) {
+  const map = {
+    slack:     { slack_webhook_url: document.getElementById("s-webhook").value.trim() },
+    alerting:  { cooldown_sec: parseInt(document.getElementById("s-cooldown").value) },
+    defaults:  { default_interval_sec: parseInt(document.getElementById("s-interval").value) },
+    retention: { retention_days: parseInt(document.getElementById("s-retention").value) },
+    webhook:   { webhook_url: document.getElementById("s-custom-webhook").value.trim() },
+    discord:   { discord_webhook_url: document.getElementById("s-discord-webhook").value.trim() },
+    teams:     { teams_webhook_url: document.getElementById("s-teams-webhook").value.trim() },
+    email:     {
+      smtp_host: document.getElementById("s-smtp-host").value,
+      smtp_port: parseInt(document.getElementById("s-smtp-port").value) || 587,
+      smtp_user: document.getElementById("s-smtp-user").value,
+      smtp_pass: document.getElementById("s-smtp-pass").value,
+      smtp_from: document.getElementById("s-smtp-from").value,
+      smtp_to: document.getElementById("s-smtp-to").value,
+      email_alerts_enabled: document.getElementById("s-email-enabled").checked,
+      digest_interval_hours: parseInt(document.getElementById("s-digest-interval").value) || 0,
+    },
+  };
+  try { await api("/settings", "POST", map[section]); toast("Settings saved."); }
+  catch(e) { toast("Save failed: " + e.message, "error"); }
+}
+
+async function testSlack() {
+  try {
+    await api("/settings", "POST", { slack_webhook_url: document.getElementById("s-webhook").value.trim() });
+    const r = await api("/settings/test-slack", "POST");
+    toast(r.ok ? "Test message sent to Slack!" : "Slack test failed.", r.ok ? "success" : "error");
+  } catch(e) { toast("Test failed: " + e.message, "error"); }
+}
+
+async function testDiscord() {
+  try { await api("/settings/test-discord", "POST"); toast("Discord test sent!"); }
+  catch(e) { toast("Discord test failed: " + e.message, "error"); }
+}
+
+async function testTeams() {
+  try { await api("/settings/test-teams", "POST"); toast("Teams test sent!"); }
+  catch(e) { toast("Teams test failed: " + e.message, "error"); }
+}
+
+async function testEmail() {
+  try { await api("/settings/test-email", "POST"); toast("Email test sent!"); }
+  catch(e) { toast("Email test failed: " + e.message, "error"); }
+}
+
+async function runPurge() {
+  if (!confirm("Delete all ping data older than the retention period? This cannot be undone.")) return;
+  try { const r = await api("/retention/purge", "POST"); toast("Purge complete — " + r.rows_purged + " rows removed."); }
+  catch(e) { toast("Purge failed: " + e.message, "error"); }
+}
+
+// ── Device modal ──────────────────────────────────────────────────────────────
+async function openAddModal() {
+  const s = await api("/settings");
+  document.getElementById("modal-title").textContent = "Add Device";
+  document.getElementById("modal-device-id").value = "";
+  document.getElementById("field-name").value = "";
+  document.getElementById("field-host").value = "";
+  document.getElementById("field-probe").value = "icmp";
+  document.getElementById("field-interval").value = s.default_interval_sec || 5;
+  document.getElementById("field-pktsize").value = "";
+  document.getElementById("field-dfbit").checked = false;
+  document.getElementById("field-lat").value = "";
+  document.getElementById("field-lat-warn").value = "";
+  document.getElementById("field-jit").value = "";
+  document.getElementById("field-jit-warn").value = "";
+  document.getElementById("field-notes").value = "";
+  document.getElementById("field-tagcolor").value = "#3b82f6";
+  updateHostLabel();
+  document.getElementById("device-modal").classList.add("open");
+  document.getElementById("field-name").focus();
+}
+
+function editDevice(id) {
+  const d = devices.find(d => d.id === id);
+  if (!d) return;
+  document.getElementById("modal-title").textContent = "Edit Device";
+  document.getElementById("modal-device-id").value = id;
+  document.getElementById("field-name").value = d.name;
+  document.getElementById("field-host").value = d.host;
+  document.getElementById("field-probe").value = d.probe_type || "icmp";
+  document.getElementById("field-interval").value = d.interval_sec;
+  document.getElementById("field-pktsize").value = d.packet_size || "";
+  document.getElementById("field-dfbit").checked = !!d.df_bit;
+  const th = d.thresholds || {};
+  document.getElementById("field-lat").value = th.latency_ms || "";
+  document.getElementById("field-lat-warn").value = th.latency_ms_warn || "";
+  document.getElementById("field-jit").value = th.jitter_ms || "";
+  document.getElementById("field-jit-warn").value = th.jitter_ms_warn || "";
+  document.getElementById("field-notes").value = d.notes || "";
+  document.getElementById("field-tagcolor").value = d.tag_color || "#3b82f6";
+  updateHostLabel();
+  document.getElementById("device-modal").classList.add("open");
+}
+
+function closeModal() { document.getElementById("device-modal").classList.remove("open"); }
+
+async function saveDevice() {
+  const id = document.getElementById("modal-device-id").value;
+  const lat = document.getElementById("field-lat").value;
+  const latWarn = document.getElementById("field-lat-warn").value;
+  const jit = document.getElementById("field-jit").value;
+  const jitWarn = document.getElementById("field-jit-warn").value;
+  const pktsize = document.getElementById("field-pktsize").value;
+  const thresholds = {};
+  if (lat) thresholds.latency_ms = parseFloat(lat);
+  if (latWarn) thresholds.latency_ms_warn = parseFloat(latWarn);
+  if (jit) thresholds.jitter_ms = parseFloat(jit);
+  if (jitWarn) thresholds.jitter_ms_warn = parseFloat(jitWarn);
+  const payload = {
+    name: document.getElementById("field-name").value.trim(),
+    host: document.getElementById("field-host").value.trim(),
+    probe_type: document.getElementById("field-probe").value,
+    interval_sec: parseInt(document.getElementById("field-interval").value) || 5,
+    packet_size: pktsize ? parseInt(pktsize) : null,
+    df_bit: document.getElementById("field-dfbit").checked,
+    enabled: true,
+    thresholds,
+    notes: document.getElementById("field-notes").value.trim(),
+    tag_color: document.getElementById("field-tagcolor").value || null,
+  };
+  if (!payload.name || !payload.host) { toast("Name and host are required.", "error"); return; }
+  try {
+    if (id) await api("/devices/" + id, "PATCH", payload);
+    else await api("/devices", "POST", payload);
+    closeModal();
+    await loadDevices();
+    toast(id ? "Device updated." : "Device added.");
+  } catch(e) { toast("Save failed: " + e.message, "error"); }
+}
+
+async function deleteDevice(id) {
+  await api("/devices/" + id, "DELETE");
+  if (activeDeviceId === id) {
+    activeDeviceId = null;
+    document.getElementById("empty-state").style.display = "flex";
+    document.getElementById("device-view").className = "device-view";
+  }
+  await loadDevices();
+  toast("Device removed.");
+}
+
+// ── Group management ──────────────────────────────────────────────────────────
+async function assignGroup(deviceId) {
+  if (!groups.length) { toast("No groups yet — create one in Settings.", "error"); return; }
+  const opts = [["(none)", ""], ...groups.map(g => [g.name, g.id])];
+  const sel = prompt("Assign to group:\n" + opts.map((o,i) => `${i}: ${o[0]}`).join("\n") + "\n\nEnter number:");
+  if (sel === null) return;
+  const chosen = opts[parseInt(sel)];
+  if (!chosen) return;
+  await api("/devices/" + deviceId, "PATCH", { group_id: chosen[1] || null });
+  await loadDevices();
+}
+
+async function renameGroup(groupId, current) {
+  const name = prompt("Rename group:", current);
+  if (!name || name === current) return;
+  await api("/groups/" + groupId, "PATCH", { name });
+  await loadGroups();
+  renderSidebar();
+}
+
+async function deleteGroup(groupId) {
+  if (!confirm("Delete group? Devices will become ungrouped.")) return;
+  await api("/groups/" + groupId, "DELETE");
+  await loadGroups();
+  await loadDevices();
+}
+
+async function createGroup() {
+  const name = document.getElementById("new-group-name").value.trim();
+  if (!name) return;
+  await api("/groups", "POST", { name });
+  document.getElementById("new-group-name").value = "";
+  await loadGroups();
+  renderGroupsList();
+  renderSidebar();
+}
+
+function renderGroupsList() {
+  const el = document.getElementById("groups-list");
+  if (!el) return;
+  el.innerHTML = groups.map(g =>
+    `<span style="background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:3px 10px;font-size:12px;font-family:var(--mono)">
+      ${esc(g.name)}
+      <button class="btn-icon danger" onclick="deleteGroup(${g.id})">✕</button>
+    </span>`
+  ).join("") || `<span style="color:var(--muted);font-size:12px">No groups yet.</span>`;
+}
+
+// ── Maintenance windows ───────────────────────────────────────────────────────
+let maintenanceWindows = [];
+
+async function loadMaintenance() {
+  maintenanceWindows = await api("/maintenance");
+  renderMaintenanceList();
+  const sel = document.getElementById("maint-device");
+  if (sel) {
+    sel.innerHTML = `<option value="">All devices</option>` +
+      devices.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("");
+  }
+}
+
+function renderMaintenanceList() {
+  const el = document.getElementById("maintenance-list");
+  if (!el) return;
+  if (!maintenanceWindows.length) {
+    el.innerHTML = `<p style="color:var(--muted);font-size:12px">No scheduled windows.</p>`;
+    return;
+  }
+  const now = new Date().toISOString();
+  el.innerHTML = maintenanceWindows.map(w => {
+    const active = w.start <= now && now <= w.end;
+    const devName = w.device_id ? (devices.find(d => d.id === w.device_id)?.name || "Device " + w.device_id) : "All devices";
+    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+      ${active ? `<span style="background:rgba(245,158,11,.15);color:var(--warning);padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600">ACTIVE</span>` : ""}
+      <span style="font-family:var(--mono);font-weight:500">${esc(w.label)}</span>
+      <span style="color:var(--muted)">${w.start.slice(0,16).replace("T"," ")} → ${w.end.slice(0,16).replace("T"," ")} UTC</span>
+      <span style="color:var(--muted)">${devName}</span>
+      <button class="btn-sm danger" onclick="deleteMaintenance(${w.id})">Remove</button>
+    </div>`;
+  }).join("");
+}
+
+async function createMaintenance() {
+  const label = document.getElementById("maint-label").value.trim();
+  const startLocal = document.getElementById("maint-start").value;
+  const endLocal = document.getElementById("maint-end").value;
+  const deviceId = document.getElementById("maint-device").value;
+  if (!label || !startLocal || !endLocal) { toast("Fill in label, start and end.", "error"); return; }
+  const start = new Date(startLocal).toISOString();
+  const end = new Date(endLocal).toISOString();
+  await api("/maintenance", "POST", { label, start, end, device_id: deviceId ? parseInt(deviceId) : null });
+  toast("Maintenance window scheduled.");
+  await loadMaintenance();
+}
+
+async function deleteMaintenance(id) {
+  await api("/maintenance/" + id, "DELETE");
+  await loadMaintenance();
+}
+
+function getMaintenanceAnnotations(hours) {
+  const now = Date.now();
+  const cutoff = now - hours * 3600 * 1000;
+  return maintenanceWindows
+    .filter(w => new Date(w.end).getTime() >= cutoff)
+    .map(w => ({
+      type: "box",
+      xMin: Math.max(new Date(w.start).getTime(), cutoff),
+      xMax: Math.min(new Date(w.end).getTime(), now),
+      backgroundColor: "rgba(100,116,139,0.12)",
+      borderColor: "rgba(100,116,139,0.3)",
+      borderWidth: 1,
+      label: { content: w.label, display: true, color: "#64748b", font: { size: 9 } }
+    }));
+}
+
+// ── Host label / probe type ───────────────────────────────────────────────────
+const HOST_LABELS = { icmp: "Host / IP Address", http: "URL", tcp: "Host:Port (e.g. 192.168.1.1:22)", dns: "Hostname to resolve", traceroute: "Host / IP Address" };
+const HOST_PLACEHOLDERS = { icmp: "e.g. 192.168.1.1", http: "e.g. https://example.com/health", tcp: "e.g. 192.168.1.1:443", dns: "e.g. google.com", traceroute: "e.g. 8.8.8.8" };
+function updateHostLabel() {
+  const t = document.getElementById("field-probe").value;
+  document.getElementById("host-label").textContent = HOST_LABELS[t];
+  document.getElementById("field-host").placeholder = HOST_PLACEHOLDERS[t];
+  document.getElementById("interval-hint").textContent = t === "traceroute" ? "Traceroute takes 5–30s per run. Recommend 60s minimum." : "";
+  const showOpts = t === "icmp" || t === "traceroute";
+  document.getElementById("icmp-options").style.display = showOpts ? "" : "none";
+  const dfGroup = document.getElementById("field-dfbit").closest("div.form-group");
+  if (dfGroup) dfGroup.style.display = t === "icmp" ? "" : "none";
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+function esc(s) { return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/'/g,"&#39;"); }
+function fmtTime(iso) { return new Date(iso + (iso.endsWith("Z") ? "" : "Z")).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+document.getElementById("device-modal").addEventListener("click", e => { if (e.target === e.currentTarget) closeModal(); });
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener("keydown", e => {
+  if (["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName)) return;
+  if (e.key === "j" || e.key === "k") {
+    const visible = devices.filter(d => {
+      const card = document.querySelector(`[data-id="${d.id}"]`);
+      return card && card.style.display !== "none";
+    });
+    const idx = visible.findIndex(d => d.id === activeDeviceId);
+    const next = e.key === "j" ? Math.min(idx + 1, visible.length - 1) : Math.max(idx - 1, 0);
+    if (visible[next]) selectDevice(visible[next].id);
+  }
+  if (e.key === "r" && activeDeviceId) loadDeviceData(activeDeviceId);
+  if (e.key === "n") openAddModal();
+  if (e.key === "Escape") {
+    if (document.getElementById("fs-overlay").classList.contains("open")) closeFsOverlayBtn();
+    else if (document.getElementById("device-modal").classList.contains("open")) closeModal();
+  }
+});
+</script>
+</body>
+</html>
