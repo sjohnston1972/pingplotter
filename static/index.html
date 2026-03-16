@@ -25,6 +25,10 @@
     .status-pill{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted)}
     .pulse{width:7px;height:7px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    @keyframes stSpin{to{transform:rotate(360deg)}}
+    .st-spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:stSpin .7s linear infinite;vertical-align:middle;margin-right:6px}
+    .gauge-wrap{display:flex;align-items:center;justify-content:center;gap:0;padding:24px 0 16px}
+    .gauge-centre{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-width:100px;padding:0 12px}
     .page{display:none;flex:1;overflow:hidden}
     .page.active{display:flex}
     .scroll-page-wrap{display:none;flex:1;overflow:hidden}
@@ -278,18 +282,98 @@
 
 <div class="scroll-page-wrap" id="page-speedtest">
   <div class="scroll-page" style="padding:24px;max-width:1100px;margin:0 auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-      <h2 style="font-size:18px;font-weight:600">Bandwidth History</h2>
-      <div style="display:flex;gap:8px;align-items:center">
-        <select class="ctrl-select" id="speedtest-hours" onchange="loadSpeedtest()">
-          <option value="24">Last 24h</option>
-          <option value="168" selected>Last 7d</option>
-          <option value="720">Last 30d</option>
-        </select>
-        <button class="btn-run" onclick="runSpeedtest()">Run Now</button>
+
+    <!-- Gauge block -->
+    <div class="gauge-wrap">
+
+      <!-- Download gauge -->
+      <svg viewBox="0 0 200 130" style="width:100%;max-width:260px;flex:1">
+        <!-- track -->
+        <path d="M15 115 A85 85 0 0 1 185 115" fill="none" stroke="#1e293b" stroke-width="14" stroke-linecap="round"/>
+        <!-- zone: red 0-25% -->
+        <path d="M15 115 A85 85 0 0 1 185 115" fill="none" stroke="#ef4444" stroke-width="10"
+              stroke-linecap="butt" stroke-dasharray="66.8 267.0" stroke-dashoffset="0"/>
+        <!-- zone: amber 25-60% -->
+        <path d="M15 115 A85 85 0 0 1 185 115" fill="none" stroke="#f59e0b" stroke-width="10"
+              stroke-linecap="butt" stroke-dasharray="93.5 267.0" stroke-dashoffset="-66.8"/>
+        <!-- zone: blue 60-100% -->
+        <path d="M15 115 A85 85 0 0 1 185 115" fill="none" stroke="#3b82f6" stroke-width="10"
+              stroke-linecap="butt" stroke-dasharray="106.8 267.0" stroke-dashoffset="-160.3"/>
+        <!-- needle -->
+        <line id="gauge-dl-needle" x1="100" y1="115" x2="28" y2="115"
+              stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+        <!-- hub -->
+        <circle id="gauge-dl-hub" cx="100" cy="115" r="6" fill="#ef4444"/>
+        <!-- value -->
+        <text id="gauge-dl-val" x="100" y="94" text-anchor="middle"
+              fill="#e2e8f0" font-size="28" font-weight="700" font-family="IBM Plex Mono, monospace">0</text>
+        <text x="100" y="109" text-anchor="middle"
+              fill="#64748b" font-size="10" font-family="IBM Plex Mono, monospace">Mbps</text>
+        <text x="100" y="127" text-anchor="middle"
+              fill="#3b82f6" font-size="9" font-weight="600" font-family="IBM Plex Mono, monospace" letter-spacing="1">DOWNLOAD</text>
+        <text x="17" y="109" text-anchor="middle" fill="#475569" font-size="8" font-family="IBM Plex Mono, monospace">0</text>
+        <text x="183" y="109" text-anchor="middle" fill="#475569" font-size="8" font-family="IBM Plex Mono, monospace">1000</text>
+      </svg>
+
+      <!-- Centre column -->
+      <div class="gauge-centre">
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">Ping</div>
+          <div style="display:flex;align-items:baseline;justify-content:center;gap:3px">
+            <span id="gauge-ping" style="font-size:30px;font-weight:700;color:#f59e0b;font-family:var(--mono)">—</span>
+            <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">ms</span>
+          </div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:9px;color:var(--muted);font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">ISP</div>
+          <div id="gauge-isp" style="font-size:12px;color:#94a3b8;font-family:var(--mono)">—</div>
+        </div>
+        <div style="text-align:center">
+          <div id="gauge-server" style="font-size:10px;color:#475569;font-family:var(--mono)">—</div>
+        </div>
+        <button id="st-run-btn" class="btn-run" onclick="runSpeedtest()" style="margin-top:8px">Run Now</button>
       </div>
+
+      <!-- Upload gauge -->
+      <svg viewBox="0 0 200 130" style="width:100%;max-width:260px;flex:1">
+        <!-- track -->
+        <path d="M15 115 A85 85 0 0 1 185 115" fill="none" stroke="#1e293b" stroke-width="14" stroke-linecap="round"/>
+        <!-- zone: red 0-25% -->
+        <path d="M15 115 A85 85 0 0 1 185 115" fill="none" stroke="#ef4444" stroke-width="10"
+              stroke-linecap="butt" stroke-dasharray="66.8 267.0" stroke-dashoffset="0"/>
+        <!-- zone: amber 25-60% -->
+        <path d="M15 115 A85 85 0 0 1 185 115" fill="none" stroke="#f59e0b" stroke-width="10"
+              stroke-linecap="butt" stroke-dasharray="93.5 267.0" stroke-dashoffset="-66.8"/>
+        <!-- zone: green 60-100% -->
+        <path d="M15 115 A85 85 0 0 1 185 115" fill="none" stroke="#10b981" stroke-width="10"
+              stroke-linecap="butt" stroke-dasharray="106.8 267.0" stroke-dashoffset="-160.3"/>
+        <!-- needle -->
+        <line id="gauge-ul-needle" x1="100" y1="115" x2="28" y2="115"
+              stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+        <!-- hub -->
+        <circle id="gauge-ul-hub" cx="100" cy="115" r="6" fill="#ef4444"/>
+        <!-- value -->
+        <text id="gauge-ul-val" x="100" y="94" text-anchor="middle"
+              fill="#e2e8f0" font-size="28" font-weight="700" font-family="IBM Plex Mono, monospace">0</text>
+        <text x="100" y="109" text-anchor="middle"
+              fill="#64748b" font-size="10" font-family="IBM Plex Mono, monospace">Mbps</text>
+        <text x="100" y="127" text-anchor="middle"
+              fill="#10b981" font-size="9" font-weight="600" font-family="IBM Plex Mono, monospace" letter-spacing="1">UPLOAD</text>
+        <text x="17" y="109" text-anchor="middle" fill="#475569" font-size="8" font-family="IBM Plex Mono, monospace">0</text>
+        <text x="185" y="109" text-anchor="middle" fill="#475569" font-size="8" font-family="IBM Plex Mono, monospace">500</text>
+      </svg>
+
+    </div><!-- /gauge-wrap -->
+
+    <!-- time-range selector -->
+    <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
+      <select class="ctrl-select" id="speedtest-hours" onchange="loadSpeedtest()">
+        <option value="24">Last 24h</option>
+        <option value="168" selected>Last 7d</option>
+        <option value="720">Last 30d</option>
+      </select>
     </div>
-    <div id="speedtest-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px"></div>
+
     <div class="chart-card" style="margin-bottom:16px">
       <div class="chart-label">Download &amp; Upload (Mbps)</div>
       <div class="chart-wrap" style="height:220px"><canvas id="chart-speedtest-bw"></canvas></div>
@@ -302,6 +386,7 @@
       <div class="section-head">History</div>
       <div id="speedtest-history"></div>
     </div>
+
   </div>
 </div>
 
