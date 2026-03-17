@@ -56,16 +56,36 @@ def run_once_streaming(emit) -> dict | None:
         emit("ping", {"ping_ms": ping, "server": server})
 
         # ── Download ──────────────────────────────────────────────────────────
+        # s.results.bytes_received is only written after download() returns, so
+        # we monkey-patch HTTPDownloader to track running threads and sum their
+        # live result lists directly.
         emit("download", {"speed": 0})
         dl_done = threading.Event()
 
+        _dl_active = []
+        _dl_lock = threading.Lock()
+        _dl_done_bytes = [0]
+        _OrigDL = _st.HTTPDownloader
+
+        class _TrackedDL(_OrigDL):
+            def run(self):
+                with _dl_lock:
+                    _dl_active.append(self)
+                try:
+                    super().run()
+                finally:
+                    with _dl_lock:
+                        _dl_active.remove(self)
+                        _dl_done_bytes[0] += sum(self.result)
+
+        _st.HTTPDownloader = _TrackedDL
+
         def _poll_dl():
-            # Cumulative speed from the start of the download phase — stable,
-            # converges to the true rate regardless of burst-y parallel streams.
             start_t = time.perf_counter()
             while not dl_done.is_set():
                 time.sleep(0.1)
-                cur_b = getattr(s.results, "bytes_received", 0)
+                with _dl_lock:
+                    cur_b = _dl_done_bytes[0] + sum(sum(t.result) for t in _dl_active)
                 dt = time.perf_counter() - start_t
                 if dt >= 0.3 and cur_b > 0:
                     emit("download", {"speed": round(cur_b * 8 / (dt * 1_000_000), 1)})
@@ -75,19 +95,41 @@ def run_once_streaming(emit) -> dict | None:
         dl_bps = s.download()
         dl_done.set()
         t.join(timeout=1)
+        _st.HTTPDownloader = _OrigDL
 
         dl_mbps = round(dl_bps / 1_000_000, 2)
         emit("download_done", {"download_mbps": dl_mbps})
 
         # ── Upload ────────────────────────────────────────────────────────────
+        # Same issue: s.results.bytes_sent is only written after upload() returns.
+        # Track live upload bytes via request.data.total (a list appended per chunk).
         emit("upload", {"speed": 0, "download_mbps": dl_mbps})
         ul_done = threading.Event()
+
+        _ul_active = []
+        _ul_lock = threading.Lock()
+        _ul_done_bytes = [0]
+        _OrigUL = _st.HTTPUploader
+
+        class _TrackedUL(_OrigUL):
+            def run(self):
+                with _ul_lock:
+                    _ul_active.append(self)
+                try:
+                    super().run()
+                finally:
+                    with _ul_lock:
+                        _ul_active.remove(self)
+                        _ul_done_bytes[0] += sum(self.request.data.total)
+
+        _st.HTTPUploader = _TrackedUL
 
         def _poll_ul():
             start_t = time.perf_counter()
             while not ul_done.is_set():
                 time.sleep(0.1)
-                cur_b = getattr(s.results, "bytes_sent", 0)
+                with _ul_lock:
+                    cur_b = _ul_done_bytes[0] + sum(sum(t.request.data.total) for t in _ul_active)
                 dt = time.perf_counter() - start_t
                 if dt >= 0.3 and cur_b > 0:
                     emit("upload", {"speed": round(cur_b * 8 / (dt * 1_000_000), 1),
@@ -98,6 +140,7 @@ def run_once_streaming(emit) -> dict | None:
         ul_bps = s.upload()
         ul_done.set()
         t2.join(timeout=1)
+        _st.HTTPUploader = _OrigUL
 
         ul_mbps = round(ul_bps / 1_000_000, 2)
         isp = (s.results.client or {}).get("isp", "")
