@@ -803,6 +803,21 @@ function renderDeviceCard(d, q) {
   </div>`;
 }
 
+async function toggleSuspend(btn, id, isSuspended) {
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    const res = await fetch(`/api/devices/${id}/${isSuspended ? "enable" : "disable"}`, {method:"POST"});
+    if (!res.ok) throw new Error(await res.text());
+    await loadDevices();
+  } catch(e) {
+    toast("Failed: " + e.message, "error");
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
 function renderSidebar() {
   const q = document.getElementById("sidebar-search")?.value.toLowerCase() || "";
   const list = document.getElementById("device-list");
