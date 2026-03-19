@@ -774,15 +774,18 @@ function renderSidebarOnly() {
 function renderDeviceCard(d, q) {
   if (q && !d.name.toLowerCase().includes(q) && !d.host.toLowerCase().includes(q)) return "";
   const s = d.live || {};
+  const isSuspended = d.enabled === false;
   const status = s.status || "unknown";
+  const statusClass = isSuspended ? "suspended" : status;
+  const statusText  = isSuspended ? "suspended" : status;
   const lat = s.last_latency != null ? s.last_latency.toFixed(1) + "ms" : "--";
   const streak = s.streak > 1 ? `<span class="streak-badge">${s.streak}✕ loss</span>` : "";
   const border = d.tag_color ? `border-left:3px solid ${d.tag_color}` : "";
-  return `<div class="device-card${d.id === activeDeviceId ? " active" : ""}${d.tag_color ? " has-tag" : ""}"
+  return `<div class="device-card${d.id === activeDeviceId ? " active" : ""}${d.tag_color ? " has-tag" : ""}${isSuspended ? " suspended" : ""}"
     data-id="${d.id}" style="${border}" onclick="selectDevice(${d.id})">
     <div class="device-card-top">
       <span class="device-name">${esc(d.name)}</span>
-      <span class="status-badge ${status}">${status}</span>
+      <span class="status-badge ${statusClass}">${statusText}</span>
     </div>
     <div class="device-host">${esc(d.host)} <span style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.05em">${d.probe_type || "icmp"}</span></div>
     ${streak}
@@ -794,6 +797,7 @@ function renderDeviceCard(d, q) {
     <div class="device-actions">
       <button class="btn-sm" onclick="event.stopPropagation();editDevice(${d.id})">Edit</button>
       <button class="btn-sm" onclick="event.stopPropagation();assignGroup(${d.id})">Group</button>
+      <button class="btn-sm ${isSuspended ? 'resume' : 'suspend'}" onclick="event.stopPropagation();toggleSuspend(this,${d.id},${isSuspended})">${isSuspended ? 'Resume' : 'Suspend'}</button>
       <button class="btn-sm danger" onclick="event.stopPropagation();deleteDevice(${d.id})">Remove</button>
     </div>
   </div>`;
