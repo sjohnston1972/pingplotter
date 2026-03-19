@@ -41,12 +41,19 @@
     .device-card{border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:6px;cursor:pointer;transition:all .15s}
     .device-card:hover{background:var(--surface2);border-color:#334155}
     .device-card.active{background:var(--surface2);border-color:var(--accent)}
+    .device-card.suspended{opacity:.5;filter:grayscale(.4)}
+    .device-card.suspended.active{opacity:.65;filter:grayscale(.3)}
     .device-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
     .device-name{font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:155px}
     .status-badge{font-family:var(--mono);font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;text-transform:uppercase}
     .status-badge.up{background:rgba(16,185,129,.15);color:var(--success)}
     .status-badge.down{background:rgba(239,68,68,.15);color:var(--danger)}
     .status-badge.unknown{background:rgba(100,116,139,.15);color:var(--muted)}
+    .status-badge.suspended{background:rgba(245,158,11,.15);color:#f59e0b}
+    .btn-sm.suspend{color:#f59e0b;border-color:#f59e0b}
+    .btn-sm.suspend:hover{background:rgba(245,158,11,.12)}
+    .btn-sm.resume{color:var(--accent);border-color:var(--accent)}
+    .btn-sm.resume:hover{background:rgba(99,102,241,.12)}
     .device-host{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px}
     .device-stats{display:flex;gap:14px}
     .stat-mini label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block}
