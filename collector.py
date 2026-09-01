@@ -18,6 +18,7 @@ _status: dict[int, dict] = {}  # live status cache
 _status_lock = threading.Lock()
 _last_route: dict[int, list] = {}  # device_id -> list of hop IPs from last traceroute run
 _streak: dict[int, int] = {}  # device_id -> consecutive failure count
+_lifecycle_lock = threading.Lock()  # guards start_device's check-then-launch section
 
 
 def _parse_hop_windows(line: str) -> dict | None:
@@ -233,23 +234,67 @@ def _device_loop(device_id: int, stop_event: threading.Event):
 
 
 def start_device(device_id: int):
-    if device_id in _threads and _threads[device_id].is_alive():
-        return  # Already running
-    stop_event = threading.Event()
-    _stop_flags[device_id] = stop_event
-    t = threading.Thread(target=_device_loop, args=(device_id, stop_event), daemon=True)
-    _threads[device_id] = t
-    t.start()
+    """Start a monitoring thread for device_id if one isn't already running.
+
+    Guarded by `_lifecycle_lock` so two concurrent callers (e.g. an edit and a
+    ping-now landing at the same moment) can never both pass the check and
+    each launch a thread, which would leave two live loops for one device.
+
+    The "already running" check only looks at whether the *current* thread's
+    own stop_event is unset -- a thread whose stop_event has already been set
+    (i.e. one mid-shutdown from a restart) never blocks a new thread from
+    starting, even if it is still technically alive() while it finishes an
+    in-flight probe.
+    """
+    with _lifecycle_lock:
+        existing_thread = _threads.get(device_id)
+        existing_stop = _stop_flags.get(device_id)
+        if (
+            existing_thread is not None
+            and existing_thread.is_alive()
+            and existing_stop is not None
+            and not existing_stop.is_set()
+        ):
+            return  # a live thread for this device is already running
+        stop_event = threading.Event()
+        _stop_flags[device_id] = stop_event
+        t = threading.Thread(target=_device_loop, args=(device_id, stop_event), daemon=True)
+        _threads[device_id] = t
+        t.start()
 
 
-def stop_device(device_id: int):
-    if device_id in _stop_flags:
-        _stop_flags[device_id].set()
+def stop_device(device_id: int) -> threading.Thread | None:
+    """Signal device_id's loop to stop.
+
+    Returns the thread that was told to stop (if any) so callers such as
+    `restart_device` can join it before starting a replacement.
+    """
+    with _lifecycle_lock:
+        stop_event = _stop_flags.get(device_id)
+        thread = _threads.get(device_id)
+    if stop_event is not None:
+        stop_event.set()
+    return thread
 
 
-def restart_device(device_id: int):
-    stop_device(device_id)
-    time.sleep(0.5)
+def restart_device(device_id: int, join_timeout: float = 10.0):
+    """Stop the device's current loop and start a fresh one, guaranteeing a
+    live thread is running when this returns (modulo the device having been
+    deleted out from under it).
+
+    Setting the stop event wakes a loop that's idle in `stop_event.wait()`
+    almost immediately, so in the common case the join below returns quickly
+    and the handoff is clean (no overlap). If the outgoing thread is instead
+    busy running a slow probe (e.g. traceroute) and doesn't exit within
+    join_timeout, start_device() is still called -- its guard only blocks on
+    a thread whose OWN stop_event is unset, and this thread's stop_event was
+    just set, so the stale thread can never prevent a new one from starting.
+    The stale thread simply finishes its in-flight probe and exits on its own
+    next time it checks its stop_event.
+    """
+    old_thread = stop_device(device_id)
+    if old_thread is not None and old_thread.is_alive():
+        old_thread.join(timeout=join_timeout)
     start_device(device_id)
 
 
