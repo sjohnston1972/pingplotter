@@ -780,7 +780,7 @@ function renderDeviceCard(d, q) {
   const statusText  = isSuspended ? "suspended" : status;
   const lat = s.last_latency != null ? s.last_latency.toFixed(1) + "ms" : "--";
   const streak = s.streak > 1 ? `<span class="streak-badge">${s.streak}✕ loss</span>` : "";
-  const border = d.tag_color ? `border-left:3px solid ${d.tag_color}` : "";
+  const border = d.tag_color ? `border-left:3px solid ${esc(d.tag_color)}` : "";
   return `<div class="device-card${d.id === activeDeviceId ? " active" : ""}${d.tag_color ? " has-tag" : ""}${isSuspended ? " suspended" : ""}"
     data-id="${d.id}" style="${border}" onclick="selectDevice(${d.id})">
     <div class="device-card-top">
@@ -1865,8 +1865,8 @@ function renderSpeedtestHistory(results) {
       <td style="font-family:var(--mono)">${r.download_mbps} Mbps</td>
       <td style="font-family:var(--mono)">${r.upload_mbps} Mbps</td>
       <td style="font-family:var(--mono)">${r.ping_ms} ms</td>
-      <td>${r.server}</td>
-      <td>${r.isp}</td>
+      <td>${esc(r.server)}</td>
+      <td>${esc(r.isp)}</td>
     </tr>`).join("") +
     `</tbody></table>`;
 }
@@ -2180,7 +2180,7 @@ function renderMaintenanceList() {
       ${active ? `<span style="background:rgba(245,158,11,.15);color:var(--warning);padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600">ACTIVE</span>` : ""}
       <span style="font-family:var(--mono);font-weight:500">${esc(w.label)}</span>
       <span style="color:var(--muted)">${w.start.slice(0,16).replace("T"," ")} → ${w.end.slice(0,16).replace("T"," ")} UTC</span>
-      <span style="color:var(--muted)">${devName}</span>
+      <span style="color:var(--muted)">${esc(devName)}</span>
       <button class="btn-sm danger" onclick="deleteMaintenance(${w.id})">Remove</button>
     </div>`;
   }).join("");
@@ -2235,7 +2235,14 @@ function updateHostLabel() {
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────
-function esc(s) { return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/'/g,"&#39;"); }
+// esc() is applied to every server-sourced string interpolated into innerHTML/template
+// literals below, including inside HTML attributes (it escapes & < > ' " so a value
+// can't break out of a double- or single-quoted attribute). Sinks reviewed and treated
+// as intentionally unescaped: numeric values (ids, mtu_bytes, latency/ms figures),
+// enum-like fields fully controlled by server logic (status/alert_type/probe_type used
+// only as CSS class tokens or fixed text such as "up"/"down"/"latency_high"), and
+// backend-formatted ISO timestamps/dates (fmtTime()-formatted strings, SLA cell dates).
+function esc(s) { return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
 function fmtTime(iso) { return new Date(iso + (iso.endsWith("Z") ? "" : "Z")).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
 document.getElementById("device-modal").addEventListener("click", e => { if (e.target === e.currentTarget) closeModal(); });
 
