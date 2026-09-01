@@ -157,6 +157,78 @@ def _ping_once(host: str, packet_size: int | None = None, df_bit: bool = False) 
         return False, None
 
 
+def _probe_and_record(device_id: int, device: dict, last_latency: float | None) -> float | None:
+    """Run a single probe for `device`, persist/alert on the result, and return
+    the latency to use as `last_latency` on the next call (for jitter calc).
+
+    Shared by `_device_loop` (the scheduled loop) and `probe_now` (an
+    out-of-band immediate probe), so both paths behave identically.
+    """
+    host = device["host"]
+    probe_type = device.get("probe_type", "icmp")
+    packet_size = device.get("packet_size") or None
+    df_bit = bool(device.get("df_bit", False))
+    ts = datetime.utcnow().isoformat()
+    route_changed = False
+    if probe_type == "http":
+        success, latency = _probe_http(host)
+    elif probe_type == "tcp":
+        success, latency = _probe_tcp(host)
+    elif probe_type == "dns":
+        success, latency = _probe_dns(host)
+    elif probe_type == "traceroute":
+        success, hops, latency = _run_traceroute(host, packet_size)
+        save_trace_run(device_id, ts, hops)
+        current_ips = [h.get("ip") for h in hops if h.get("ip")]
+        prev_ips = _last_route.get(device_id)
+        if prev_ips is not None and current_ips != prev_ips:
+            route_changed = True
+        _last_route[device_id] = current_ips
+    else:
+        success, latency = _ping_once(host, packet_size, df_bit)
+
+    # Calculate jitter (difference from last reading)
+    jitter = None
+    if latency is not None and last_latency is not None:
+        jitter = abs(latency - last_latency)
+    if latency is not None:
+        last_latency = latency
+
+    save_result(device_id, latency, success, jitter)
+
+    # Update streak counter
+    if not success:
+        _streak[device_id] = _streak.get(device_id, 0) + 1
+    else:
+        _streak[device_id] = 0
+
+    # Update live status cache
+    with _status_lock:
+        _status[device_id] = {
+            "device_id": device_id,
+            "name": device["name"],
+            "host": host,
+            "last_ping": datetime.utcnow().isoformat(),
+            "last_latency": latency,
+            "last_success": success,
+            "last_jitter": jitter,
+            "status": "up" if success else "down",
+            "streak": _streak.get(device_id, 0),
+        }
+
+    # Check alert thresholds
+    check_and_alert(device, latency, success, jitter, route_changed=route_changed)
+
+    # Anomaly detection
+    if success and latency is not None:
+        import baseline as bl
+        if bl.is_anomaly(device_id, latency):
+            from alerts import fire_anomaly_alert
+            fire_anomaly_alert(device, latency, bl.get_baseline(device_id))
+
+    return last_latency
+
+
 def _device_loop(device_id: int, stop_event: threading.Event):
     last_latency: float | None = None
 
@@ -167,70 +239,29 @@ def _device_loop(device_id: int, stop_event: threading.Event):
             break
 
         interval = device.get("interval_sec", 5)
-        host = device["host"]
-
-        probe_type = device.get("probe_type", "icmp")
-        packet_size = device.get("packet_size") or None
-        df_bit = bool(device.get("df_bit", False))
-        ts = datetime.utcnow().isoformat()
-        route_changed = False
-        if probe_type == "http":
-            success, latency = _probe_http(host)
-        elif probe_type == "tcp":
-            success, latency = _probe_tcp(host)
-        elif probe_type == "dns":
-            success, latency = _probe_dns(host)
-        elif probe_type == "traceroute":
-            success, hops, latency = _run_traceroute(host, packet_size)
-            save_trace_run(device_id, ts, hops)
-            current_ips = [h.get("ip") for h in hops if h.get("ip")]
-            prev_ips = _last_route.get(device_id)
-            if prev_ips is not None and current_ips != prev_ips:
-                route_changed = True
-            _last_route[device_id] = current_ips
-        else:
-            success, latency = _ping_once(host, packet_size, df_bit)
-
-        # Calculate jitter (difference from last reading)
-        jitter = None
-        if latency is not None and last_latency is not None:
-            jitter = abs(latency - last_latency)
-        if latency is not None:
-            last_latency = latency
-
-        save_result(device_id, latency, success, jitter)
-
-        # Update streak counter
-        if not success:
-            _streak[device_id] = _streak.get(device_id, 0) + 1
-        else:
-            _streak[device_id] = 0
-
-        # Update live status cache
-        with _status_lock:
-            _status[device_id] = {
-                "device_id": device_id,
-                "name": device["name"],
-                "host": host,
-                "last_ping": datetime.utcnow().isoformat(),
-                "last_latency": latency,
-                "last_success": success,
-                "last_jitter": jitter,
-                "status": "up" if success else "down",
-                "streak": _streak.get(device_id, 0),
-            }
-
-        # Check alert thresholds
-        check_and_alert(device, latency, success, jitter, route_changed=route_changed)
-
-        # Anomaly detection
-        if success and latency is not None:
-            import baseline as bl
-            if bl.is_anomaly(device_id, latency):
-                from alerts import fire_anomaly_alert
-                fire_anomaly_alert(device, latency, bl.get_baseline(device_id))
+        last_latency = _probe_and_record(device_id, device, last_latency)
 
         stop_event.wait(interval)
+
+
+def probe_now(device_id: int) -> bool:
+    """Run a single immediate, out-of-band probe for device_id.
+
+    This does NOT touch the device's scheduled loop/thread at all -- it just
+    runs one probe synchronously and records it, reusing the same probe
+    dispatch and side effects (save_result/status/alerts) as the loop. Used by
+    `/ping-now` so an immediate reading never risks killing monitoring.
+
+    Returns False if the device no longer exists.
+    """
+    devices = load_devices()
+    device = next((d for d in devices if d["id"] == device_id), None)
+    if device is None:
+        return False
+    status = get_device_status(device_id)
+    last_latency = status.get("last_latency") if status else None
+    _probe_and_record(device_id, device, last_latency)
+    return True
 
 
 def start_device(device_id: int):

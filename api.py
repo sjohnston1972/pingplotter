@@ -522,7 +522,7 @@ def ping_now(device_id: int):
     devices_list = storage.load_devices()
     if not any(d["id"] == device_id for d in devices_list):
         raise HTTPException(status_code=404, detail="Device not found")
-    collector.restart_device(device_id)
+    collector.probe_now(device_id)
     return {"ok": True}
 
 
