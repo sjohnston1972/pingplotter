@@ -129,6 +129,27 @@ Open **http://localhost:8000** — the UI loads immediately with no further conf
 
 API docs: **http://localhost:8000/docs**
 
+### Network exposure
+
+By default the server binds to **`127.0.0.1`** (localhost only) — it is not
+reachable from other machines out of the box.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `PINGPLOTTER_HOST` | `127.0.0.1` | Bind address. Set to `0.0.0.0` to expose PingPlotter on your LAN/network. |
+| `PINGPLOTTER_PORT` | `8000` | Bind port. |
+
+```bash
+# Expose on the LAN
+PINGPLOTTER_HOST=0.0.0.0 python main.py
+```
+
+> **Upgrade note:** if you previously relied on the old default of binding to
+> `0.0.0.0`, set `PINGPLOTTER_HOST=0.0.0.0` explicitly to keep that
+> behaviour. If you do expose PingPlotter beyond localhost, pair it with
+> `PINGPLOTTER_TOKEN` (see below) — otherwise every endpoint (device
+> management, settings, data purge) is open to anyone who can reach the port.
+
 ### Windows note
 Raw ICMP sockets require administrator privileges on Windows. Run from an elevated terminal, or use TCP/HTTP probe types instead.
 

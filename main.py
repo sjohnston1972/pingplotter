@@ -1,6 +1,7 @@
 """
 main.py - PingPlotter entry point
 """
+import os
 import uvicorn
 import collector
 import storage
@@ -20,4 +21,9 @@ if digest_interval > 0:
     digest_mod.start(digest_interval)
 
 if __name__ == "__main__":
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=False)
+    # Bind to localhost by default - opt in to network exposure with
+    # PINGPLOTTER_HOST (e.g. PINGPLOTTER_HOST=0.0.0.0). Pair a non-localhost
+    # bind with PINGPLOTTER_TOKEN (see api.py) so the API isn't wide open.
+    host = os.environ.get("PINGPLOTTER_HOST", "127.0.0.1")
+    port = int(os.environ.get("PINGPLOTTER_PORT", "8000"))
+    uvicorn.run("api:app", host=host, port=port, reload=False)
