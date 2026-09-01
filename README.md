@@ -149,6 +149,12 @@ All configuration is done from the **Settings** tab in the UI. Nothing requires 
 
 Use the **Test** buttons to verify before saving.
 
+`GET /api/settings` never returns secret values (SMTP password, webhook
+URLs) in cleartext — it returns a masked placeholder plus a `<field>_set`
+boolean so the UI can show "configured" without exposing the value.
+Re-saving the settings form without changing a secret field preserves the
+value already on disk; sending an empty value clears it.
+
 ### Speedtest
 Set the interval in minutes (0 = disabled). Results appear in the Speedtest tab.
 

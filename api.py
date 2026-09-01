@@ -17,6 +17,32 @@ import storage
 app = FastAPI(title="PingPlotter API", version="1.0")
 _geo_cache: dict = {}  # ip -> {country, org, city, region}
 
+# ── Settings fields that must never be echoed back in cleartext ────────────────
+SECRET_SETTINGS_FIELDS = [
+    "smtp_pass",
+    "slack_webhook_url",
+    "discord_webhook_url",
+    "teams_webhook_url",
+    "webhook_url",
+]
+SECRET_PLACEHOLDER = "********"
+
+
+def _redact_settings(s: dict) -> dict:
+    """Return a copy of the settings dict with secret fields masked.
+
+    Each secret field is replaced with a fixed placeholder when a value is
+    stored, or left as an empty string when it isn't. A companion
+    "<field>_set" boolean is included so the UI can tell "configured" apart
+    from "empty" without ever seeing the real value.
+    """
+    redacted = dict(s)
+    for field in SECRET_SETTINGS_FIELDS:
+        value = redacted.get(field) or ""
+        redacted[f"{field}_set"] = bool(value)
+        redacted[field] = SECRET_PLACEHOLDER if value else ""
+    return redacted
+
 
 # ── Pydantic models ────────────────────────────────────────────────────────────
 
@@ -191,12 +217,20 @@ def get_settings():
     # Env var overrides stored webhook
     if os.environ.get("SLACK_WEBHOOK_URL"):
         s["slack_webhook_url"] = os.environ["SLACK_WEBHOOK_URL"]
-    return s
+    return _redact_settings(s)
 
 
 @app.post("/api/settings")
 def update_settings(payload: dict):
-    return storage.save_settings(payload)
+    cleaned = dict(payload)
+    for field in SECRET_SETTINGS_FIELDS:
+        # A placeholder means "unchanged" - don't clobber the stored secret.
+        if cleaned.get(field) == SECRET_PLACEHOLDER:
+            del cleaned[field]
+        # Never let a client write the "_set" flag as if it were real data.
+        cleaned.pop(f"{field}_set", None)
+    updated = storage.save_settings(cleaned)
+    return _redact_settings(updated)
 
 
 @app.post("/api/settings/test-slack")
