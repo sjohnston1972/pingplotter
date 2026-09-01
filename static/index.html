@@ -1261,7 +1261,7 @@ function _renderGeoCell(cell, geo) {
   if (geo && geo.org) {
     const asn = geo.org.split(" ")[0];
     const orgName = geo.org.replace(asn, "").trim();
-    cell.innerHTML = `<span style="color:var(--accent);font-family:var(--mono);font-size:10px">${asn}</span> <span style="color:var(--muted);font-size:10px">${orgName.slice(0,25)}</span>`;
+    cell.innerHTML = `<span style="color:var(--accent);font-family:var(--mono);font-size:10px">${esc(asn)}</span> <span style="color:var(--muted);font-size:10px">${esc(orgName.slice(0,25))}</span>`;
   } else {
     cell.textContent = "—";
   }
@@ -1310,9 +1310,9 @@ function renderAsPath(hops, geoCache) {
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:12px">
       ${asns.map((a, i) => `
         <span style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:11px;font-family:var(--mono)">
-          <span style="color:var(--accent)">${a.asn}</span>
-          <span style="color:var(--muted)"> ${a.org}</span>
-          ${a.country ? `<span style="font-size:10px"> ${a.country}</span>` : ""}
+          <span style="color:var(--accent)">${esc(a.asn)}</span>
+          <span style="color:var(--muted)"> ${esc(a.org)}</span>
+          ${a.country ? `<span style="font-size:10px"> ${esc(a.country)}</span>` : ""}
         </span>
         ${i < asns.length - 1 ? '<span style="color:var(--muted)">→</span>' : ""}
       `).join("")}
@@ -1454,6 +1454,10 @@ async function resolveIp(ip, btn) {
 let leafletMap = null;
 let mapLayers = [];
 
+function geoPopupHtml(p) {
+  return `<b>${esc(p.ip)}</b><br>${esc(p.city || "")}${p.city ? ", " : ""}${esc(p.country || "")}<br><span style="color:#64748b">${esc(p.org || "")}</span>`;
+}
+
 async function loadMap() {
   const statusEl = document.getElementById("map-status");
   if (statusEl) statusEl.textContent = "Loading geo data…";
@@ -1510,7 +1514,7 @@ async function loadMap() {
         const marker = L.circleMarker([p.lat, p.lng], {
           radius: 5, color, fillColor: color, fillOpacity: 0.8, weight: 1.5
         }).addTo(leafletMap);
-        marker.bindPopup(`<b>${p.ip}</b><br>${p.city || ""}${p.city ? ", " : ""}${p.country || ""}<br><span style="color:#64748b">${p.org || ""}</span>`);
+        marker.bindPopup(geoPopupHtml(p));
         mapLayers.push(marker);
         totalPins++;
       }
@@ -1929,7 +1933,7 @@ function renderNetworkEvents(events) {
     events.map(e => `<tr>
       <td style="font-family:var(--mono);font-size:11px">${e.ts.slice(0,19).replace("T"," ")}</td>
       <td><span class="alert-type ${e.type}">${e.type.replace(/_/g," ")}</span></td>
-      <td style="font-size:12px">${e.device_names.join(", ")}</td>
+      <td style="font-size:12px">${e.device_names.map(esc).join(", ")}</td>
       <td style="font-family:var(--mono)">${e.count}</td>
     </tr>`).join("") +
     `</tbody></table>`;
