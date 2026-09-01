@@ -3,12 +3,14 @@ api.py - FastAPI REST endpoints
 """
 import asyncio
 import json
+import logging
 import os
+import secrets
 import urllib.request
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import collector
@@ -16,6 +18,8 @@ import storage
 
 app = FastAPI(title="PingPlotter API", version="1.0")
 _geo_cache: dict = {}  # ip -> {country, org, city, region}
+
+logger = logging.getLogger("pingplotter")
 
 # ── Settings fields that must never be echoed back in cleartext ────────────────
 SECRET_SETTINGS_FIELDS = [
@@ -42,6 +46,42 @@ def _redact_settings(s: dict) -> dict:
         redacted[f"{field}_set"] = bool(value)
         redacted[field] = SECRET_PLACEHOLDER if value else ""
     return redacted
+
+
+# ── Shared-token authentication ─────────────────────────────────────────────────
+# Optional: set PINGPLOTTER_TOKEN to require a shared secret on every /api/*
+# request. When unset, the API remains open (zero-config localhost workflow).
+API_TOKEN = os.environ.get("PINGPLOTTER_TOKEN", "").strip()
+
+if not API_TOKEN:
+    logger.warning(
+        "PINGPLOTTER_TOKEN is not set - the API is running WITHOUT AUTHENTICATION. "
+        "Anyone who can reach this port can read and change all settings and data. "
+        "Set the PINGPLOTTER_TOKEN environment variable to require a shared token "
+        "on all /api/* requests."
+    )
+
+
+def _extract_token(request: Request) -> str:
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    header_token = request.headers.get("x-auth-token", "")
+    if header_token:
+        return header_token.strip()
+    # Query-param fallback for clients that can't set headers (e.g. EventSource).
+    return (request.query_params.get("token") or "").strip()
+
+
+@app.middleware("http")
+async def require_token(request: Request, call_next):
+    if API_TOKEN and request.url.path.startswith("/api"):
+        supplied = _extract_token(request)
+        # Fail closed: a configured token means an absent or wrong token is
+        # always rejected, never silently allowed.
+        if not supplied or not secrets.compare_digest(supplied, API_TOKEN):
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
 
 
 # ── Pydantic models ────────────────────────────────────────────────────────────

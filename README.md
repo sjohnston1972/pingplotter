@@ -150,6 +150,32 @@ PINGPLOTTER_HOST=0.0.0.0 python main.py
 > `PINGPLOTTER_TOKEN` (see below) — otherwise every endpoint (device
 > management, settings, data purge) is open to anyone who can reach the port.
 
+### Authentication
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `PINGPLOTTER_TOKEN` | *(unset)* | Shared-secret token. When set, every `/api/*` request must supply it or is rejected with `401 Unauthorized`. When unset, the API is unauthenticated (fine for a strictly localhost setup; a clear warning is logged at startup). |
+
+This is a lightweight opt-in guard, not full user accounts — recommended
+whenever `PINGPLOTTER_HOST` is anything other than `127.0.0.1`.
+
+```bash
+# Expose on the LAN, protected by a shared token
+PINGPLOTTER_HOST=0.0.0.0 PINGPLOTTER_TOKEN="a-long-random-string" python main.py
+```
+
+Send the token on each API request as either header:
+
+```bash
+curl http://<host>:8000/api/settings -H "Authorization: Bearer a-long-random-string"
+curl http://<host>:8000/api/settings -H "X-Auth-Token: a-long-random-string"
+```
+
+A `?token=` query parameter is also accepted, for clients (like
+`EventSource`/SSE) that can't set custom headers. When the token is
+unset, none of this applies and all `/api/*` requests are accepted as
+before (zero-config localhost workflow is unchanged).
+
 ### Windows note
 Raw ICMP sockets require administrator privileges on Windows. Run from an elevated terminal, or use TCP/HTTP probe types instead.
 
