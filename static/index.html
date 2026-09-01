@@ -138,6 +138,7 @@
     .s-field input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:border-color .15s}
     .s-field input:focus{border-color:var(--accent)}
     .s-field .hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
+    .secret-badge{font-size:10px;font-weight:600;color:var(--success);margin-left:6px;text-transform:uppercase;letter-spacing:.04em;cursor:pointer}
     .s-card-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px}
     .btn-save{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-family:var(--sans);font-weight:500;cursor:pointer}
     .btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:8px 16px;font-size:13px;font-family:var(--sans);cursor:pointer;transition:all .15s}
@@ -437,10 +438,24 @@
     <div class="page-heading"><h1>Settings</h1><p>Application configuration. Changes take effect immediately.</p></div>
     <div class="settings-wrap">
       <div class="s-card">
+        <div class="s-card-head"><h2>API Access</h2><p>Only needed if the server was started with <code>PINGPLOTTER_TOKEN</code> set. Stored in this browser only (localStorage) and sent solely to this server's own <code>/api/*</code> requests.</p></div>
+        <div class="s-card-body">
+          <div class="s-field">
+            <label>API Token <span id="api-token-badge" class="secret-badge" onclick="clearApiToken()" title="Click to clear the token stored in this browser"></span></label>
+            <input type="password" id="s-api-token" class="form-input" placeholder="Leave blank if the server has no token configured" autocomplete="off" />
+            <div class="hint">Applies immediately to new requests and the live status connection — no page reload needed.</div>
+          </div>
+        </div>
+        <div class="s-card-foot">
+          <button class="btn-save" onclick="saveApiToken()">Save Token</button>
+          <button class="btn-outline" onclick="clearApiToken()">Clear</button>
+        </div>
+      </div>
+      <div class="s-card">
         <div class="s-card-head"><h2>Slack Alerts</h2><p>Incoming webhook for alert notifications.</p></div>
         <div class="s-card-body">
           <div class="s-field">
-            <label>Webhook URL</label>
+            <label>Webhook URL <span id="s-webhook-badge" class="secret-badge" onclick="clearSecretField('s-webhook')"></span></label>
             <input type="password" id="s-webhook" placeholder="https://hooks.slack.com/services/..." autocomplete="off" />
             <div class="hint">Saved to <code>data/settings.json</code>. The environment variable <code>SLACK_WEBHOOK_URL</code> always overrides this if set.</div>
           </div>
@@ -454,7 +469,7 @@
         <div class="s-card-head"><h2>Discord Alerts</h2><p>Incoming webhook for Discord alert notifications.</p></div>
         <div class="s-card-body">
           <div class="s-field">
-            <label>Webhook URL</label>
+            <label>Webhook URL <span id="s-discord-webhook-badge" class="secret-badge" onclick="clearSecretField('s-discord-webhook')"></span></label>
             <input type="text" id="s-discord-webhook" class="form-input" placeholder="https://discord.com/api/webhooks/..." autocomplete="off" />
           </div>
         </div>
@@ -467,7 +482,7 @@
         <div class="s-card-head"><h2>Microsoft Teams Alerts</h2><p>Incoming webhook for Teams alert notifications.</p></div>
         <div class="s-card-body">
           <div class="s-field">
-            <label>Webhook URL</label>
+            <label>Webhook URL <span id="s-teams-webhook-badge" class="secret-badge" onclick="clearSecretField('s-teams-webhook')"></span></label>
             <input type="text" id="s-teams-webhook" class="form-input" placeholder="https://outlook.office.com/webhook/..." autocomplete="off" />
           </div>
         </div>
@@ -483,7 +498,7 @@
             <div class="s-field"><label>SMTP Host</label><input type="text" id="s-smtp-host" class="form-input" placeholder="smtp.gmail.com" /></div>
             <div class="s-field"><label>Port</label><input type="number" id="s-smtp-port" class="form-input" value="587" /></div>
             <div class="s-field"><label>Username</label><input type="text" id="s-smtp-user" class="form-input" /></div>
-            <div class="s-field"><label>Password</label><input type="password" id="s-smtp-pass" class="form-input" autocomplete="off" /></div>
+            <div class="s-field"><label>Password <span id="s-smtp-pass-badge" class="secret-badge" onclick="clearSecretField('s-smtp-pass')"></span></label><input type="password" id="s-smtp-pass" class="form-input" autocomplete="off" /></div>
             <div class="s-field"><label>From</label><input type="text" id="s-smtp-from" class="form-input" /></div>
             <div class="s-field"><label>To</label><input type="text" id="s-smtp-to" class="form-input" /></div>
           </div>
@@ -527,7 +542,7 @@
         <div class="s-card-head"><h2>Custom Webhook</h2><p>POST JSON to any URL after every alert (Slack, PagerDuty, custom integrations).</p></div>
         <div class="s-card-body">
           <div class="s-field">
-            <label>Webhook URL</label>
+            <label>Webhook URL <span id="s-custom-webhook-badge" class="secret-badge" onclick="clearSecretField('s-custom-webhook')"></span></label>
             <input type="url" id="s-custom-webhook" placeholder="https://example.com/hooks/pingplot" />
             <div class="hint">Receives JSON: <code>{device_id, device_name, host, alert_type, value, threshold}</code></div>
           </div>
@@ -678,6 +693,26 @@ const prevTraceHops = {};
 const _geoCache = {};  // persistent across re-renders: ip -> geo result
 const PALETTE = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#f97316","#84cc16"];
 
+// ── API token (optional PINGPLOTTER_TOKEN on the server) ───────────────────────
+// The server only requires a token when the operator sets PINGPLOTTER_TOKEN; if
+// they haven't, none of this matters and every call below sends no token, same
+// as before this feature existed. The token itself lives only in this browser's
+// localStorage -- it is never sent anywhere except as a header/query param on
+// this page's own /api/* requests.
+const API_TOKEN_STORAGE_KEY = "pingplotter_api_token";
+const SECRET_PLACEHOLDER = "********"; // must match api.py's SECRET_PLACEHOLDER
+
+function getApiToken() {
+  try { return localStorage.getItem(API_TOKEN_STORAGE_KEY) || ""; }
+  catch { return ""; }
+}
+function setApiToken(token) {
+  try {
+    if (token) localStorage.setItem(API_TOKEN_STORAGE_KEY, token);
+    else localStorage.removeItem(API_TOKEN_STORAGE_KEY);
+  } catch {}
+}
+
 // ── Theme ─────────────────────────────────────────────────────────────────────
 function toggleTheme() {
   const light = document.documentElement.classList.toggle("light");
@@ -701,7 +736,10 @@ document.addEventListener("DOMContentLoaded", () => {
 let sseSource = null;
 function initSSE() {
   if (sseSource) sseSource.close();
-  sseSource = new EventSource("/api/sse");
+  // EventSource can't set headers, so the token (when configured) is passed
+  // as a query param here specifically -- everywhere else uses the header.
+  const token = getApiToken();
+  sseSource = new EventSource("/api/sse" + (token ? "?token=" + encodeURIComponent(token) : ""));
   sseSource.onmessage = e => {
     const statuses = JSON.parse(e.data);
     const map = {};
@@ -738,9 +776,14 @@ function switchTab(tab) {
 // ── API helper ────────────────────────────────────────────────────────────────
 async function api(path, method = "GET", body = null) {
   const opts = { method, headers: { "Content-Type": "application/json" } };
+  const token = getApiToken();
+  if (token) opts.headers["Authorization"] = "Bearer " + token;
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch("/api" + path, opts);
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) {
+    if (r.status === 401) throw new Error("Unauthorized — set the API token in Settings.");
+    throw new Error(await r.text());
+  }
   return r.json();
 }
 
@@ -808,8 +851,7 @@ async function toggleSuspend(btn, id, isSuspended) {
   btn.disabled = true;
   btn.textContent = "…";
   try {
-    const res = await fetch(`/api/devices/${id}/${isSuspended ? "enable" : "disable"}`, {method:"POST"});
-    if (!res.ok) throw new Error(await res.text());
+    await api(`/devices/${id}/${isSuspended ? "enable" : "disable"}`, "POST");
     await loadDevices();
   } catch(e) {
     toast("Failed: " + e.message, "error");
@@ -1780,7 +1822,8 @@ function runSpeedtest() {
   _setGaugeNeedle("ul", 0, 500);
   _stRaf = requestAnimationFrame(_gaugeInterp);
 
-  const es = new EventSource("/api/speedtest/stream");
+  const _stToken = getApiToken();
+  const es = new EventSource("/api/speedtest/stream" + (_stToken ? "?token=" + encodeURIComponent(_stToken) : ""));
   _stEventSource = es;
 
   es.onmessage = e => {
@@ -1940,53 +1983,134 @@ function renderNetworkEvents(events) {
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
+// Secret fields (webhook URLs, SMTP password): the server never returns the
+// real value in GET/POST /api/settings, only a masked "********" placeholder
+// plus a "<field>_set" boolean (see api.py's _redact_settings). We must not
+// show that placeholder in an input as if it were the real value -- instead
+// leave the input blank and show a "configured" badge driven by the flag.
+const SECRET_FIELD_INPUT = {
+  slack_webhook_url: "s-webhook",
+  discord_webhook_url: "s-discord-webhook",
+  teams_webhook_url: "s-teams-webhook",
+  webhook_url: "s-custom-webhook",
+  smtp_pass: "s-smtp-pass",
+};
+const _origPlaceholder = {};
+
+// Sync one secret input + its badge to the server's "<field>_set" state.
+function applySecretField(field, isSet) {
+  const inputId = SECRET_FIELD_INPUT[field];
+  const input = document.getElementById(inputId);
+  const badge = document.getElementById(inputId + "-badge");
+  if (!input) return;
+  input.value = "";
+  delete input.dataset.forceClear;
+  input.dataset.configured = isSet ? "1" : "";
+  if (!(inputId in _origPlaceholder)) _origPlaceholder[inputId] = input.placeholder || "";
+  input.placeholder = isSet ? "•••••••• (configured — leave blank to keep, or type to replace)" : _origPlaceholder[inputId];
+  if (badge) {
+    badge.textContent = isSet ? "● configured (click to clear)" : "";
+    badge.title = isSet ? "A value is stored on the server. Leave blank and save to keep it, type a new one to replace it, or click here to clear it." : "";
+  }
+}
+
+function syncSecretBadges(s) {
+  for (const field of Object.keys(SECRET_FIELD_INPUT)) applySecretField(field, !!s[field + "_set"]);
+}
+
+// What to send for a secret field, given its current input state:
+//  - user typed something -> that value (replaces the stored secret)
+//  - explicitly cleared via the badge/clear control -> "" (server clears it)
+//  - untouched and previously configured -> the placeholder (server keeps it)
+//  - untouched and never configured -> "" (still empty)
+function collectSecretValue(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return "";
+  const typed = input.value.trim();
+  if (typed) return typed;
+  if (input.dataset.forceClear === "1") return "";
+  return input.dataset.configured === "1" ? SECRET_PLACEHOLDER : "";
+}
+
+function clearSecretField(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.value = "";
+  input.dataset.configured = "";
+  input.dataset.forceClear = "1";
+  const badge = document.getElementById(inputId + "-badge");
+  if (badge) { badge.textContent = ""; badge.title = ""; }
+  toast("Cleared — click Save to remove the stored value.");
+}
+
+// ── API token status (separate from server-side settings) ──────────────────────
+function renderApiTokenStatus() {
+  const badge = document.getElementById("api-token-badge");
+  if (badge) badge.textContent = getApiToken() ? "● token set (click to clear)" : "";
+}
+function saveApiToken() {
+  const input = document.getElementById("s-api-token");
+  const val = input.value.trim();
+  setApiToken(val);
+  input.value = "";
+  renderApiTokenStatus();
+  toast(val ? "API token saved to this browser." : "API token cleared.");
+  initSSE();
+}
+function clearApiToken() {
+  setApiToken("");
+  const input = document.getElementById("s-api-token");
+  if (input) input.value = "";
+  renderApiTokenStatus();
+  toast("API token cleared.");
+  initSSE();
+}
+
 async function loadSettings() {
   const s = await api("/settings");
-  document.getElementById("s-webhook").value = s.slack_webhook_url || "";
+  syncSecretBadges(s);
   document.getElementById("s-cooldown").value = s.cooldown_sec ?? 300;
   document.getElementById("s-interval").value = s.default_interval_sec ?? 5;
   document.getElementById("s-retention").value = s.retention_days ?? 30;
-  document.getElementById("s-custom-webhook").value = s.webhook_url || "";
-  document.getElementById("s-discord-webhook").value = s.discord_webhook_url || "";
-  document.getElementById("s-teams-webhook").value = s.teams_webhook_url || "";
   document.getElementById("s-smtp-host").value = s.smtp_host || "";
   document.getElementById("s-smtp-port").value = s.smtp_port || 587;
   document.getElementById("s-smtp-user").value = s.smtp_user || "";
-  document.getElementById("s-smtp-pass").value = s.smtp_pass || "";
   document.getElementById("s-smtp-from").value = s.smtp_from || "";
   document.getElementById("s-smtp-to").value = s.smtp_to || "";
   document.getElementById("s-email-enabled").checked = !!s.email_alerts_enabled;
   document.getElementById("s-digest-interval").value = s.digest_interval_hours ?? 0;
+  renderApiTokenStatus();
   renderGroupsList();
 }
 
 async function saveSection(section) {
   const map = {
-    slack:     { slack_webhook_url: document.getElementById("s-webhook").value.trim() },
+    slack:     { slack_webhook_url: collectSecretValue("s-webhook") },
     alerting:  { cooldown_sec: parseInt(document.getElementById("s-cooldown").value) },
     defaults:  { default_interval_sec: parseInt(document.getElementById("s-interval").value) },
     retention: { retention_days: parseInt(document.getElementById("s-retention").value) },
-    webhook:   { webhook_url: document.getElementById("s-custom-webhook").value.trim() },
-    discord:   { discord_webhook_url: document.getElementById("s-discord-webhook").value.trim() },
-    teams:     { teams_webhook_url: document.getElementById("s-teams-webhook").value.trim() },
+    webhook:   { webhook_url: collectSecretValue("s-custom-webhook") },
+    discord:   { discord_webhook_url: collectSecretValue("s-discord-webhook") },
+    teams:     { teams_webhook_url: collectSecretValue("s-teams-webhook") },
     email:     {
       smtp_host: document.getElementById("s-smtp-host").value,
       smtp_port: parseInt(document.getElementById("s-smtp-port").value) || 587,
       smtp_user: document.getElementById("s-smtp-user").value,
-      smtp_pass: document.getElementById("s-smtp-pass").value,
+      smtp_pass: collectSecretValue("s-smtp-pass"),
       smtp_from: document.getElementById("s-smtp-from").value,
       smtp_to: document.getElementById("s-smtp-to").value,
       email_alerts_enabled: document.getElementById("s-email-enabled").checked,
       digest_interval_hours: parseInt(document.getElementById("s-digest-interval").value) || 0,
     },
   };
-  try { await api("/settings", "POST", map[section]); toast("Settings saved."); }
+  try { const updated = await api("/settings", "POST", map[section]); syncSecretBadges(updated); toast("Settings saved."); }
   catch(e) { toast("Save failed: " + e.message, "error"); }
 }
 
 async function testSlack() {
   try {
-    await api("/settings", "POST", { slack_webhook_url: document.getElementById("s-webhook").value.trim() });
+    const updated = await api("/settings", "POST", { slack_webhook_url: collectSecretValue("s-webhook") });
+    syncSecretBadges(updated);
     const r = await api("/settings/test-slack", "POST");
     toast(r.ok ? "Test message sent to Slack!" : "Slack test failed.", r.ok ? "success" : "error");
   } catch(e) { toast("Test failed: " + e.message, "error"); }
