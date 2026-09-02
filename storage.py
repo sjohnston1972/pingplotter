@@ -571,6 +571,15 @@ def purge_old_data(retention_days: int) -> int:
     lock is (re)acquired per file, one file at a time, so a purge across
     many devices never holds it for longer than a single file's
     read+rewrite.
+
+    The rewrite itself is crash-safe (issue #16): the kept rows are written
+    to a temp file in the same directory (so it's on the same filesystem),
+    flushed and fsync'd, and then swapped into place with `os.replace`,
+    which is atomic on both POSIX and Windows. If the process dies at any
+    point while writing the temp file, the original CSV is completely
+    untouched - readers only ever see the fully-old file or the
+    fully-new one, never a partially-written one. The temp file is cleaned
+    up on any error.
     """
     cutoff = datetime.utcnow() - timedelta(days=retention_days)
     rows_purged = 0
@@ -594,10 +603,21 @@ def purge_old_data(retention_days: int) -> int:
             if fieldnames is None:
                 # Empty/header-less file - nothing to rewrite.
                 continue
-            with open(csv_path, "w", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(kept)
+            tmp_path = csv_path.with_name(csv_path.name + f".tmp{os.getpid()}")
+            try:
+                with open(tmp_path, "w", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(kept)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, csv_path)
+            except BaseException:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise
     return rows_purged
 
 def log_alert(device_id: int, device_name: str, alert_type: str, value: float, threshold: float):
