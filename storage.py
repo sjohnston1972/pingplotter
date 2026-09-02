@@ -559,23 +559,41 @@ def load_heatmap(device_id: int) -> list[dict]:
 
 
 def purge_old_data(retention_days: int) -> int:
+    """Rewrite each results/traces CSV keeping only rows newer than the
+    retention cutoff.
+
+    The read-filter-write for a given file happens entirely inside `_lock`
+    (issue #15), the same lock `save_result`/`save_trace_run` take to append
+    a row. That closes the read-modify-write race where a row appended
+    between an out-of-lock read and a locked rewrite would be silently
+    dropped: no append for a given file can land between this function's
+    read of it and its rewrite, because both now serialize on `_lock`. The
+    lock is (re)acquired per file, one file at a time, so a purge across
+    many devices never holds it for longer than a single file's
+    read+rewrite.
+    """
     cutoff = datetime.utcnow() - timedelta(days=retention_days)
     rows_purged = 0
     for csv_path in list(RESULTS_DIR.glob("device_*.csv")) + list(TRACES_DIR.glob("device_*.csv")):
-        kept = []
-        with open(csv_path, newline="") as f:
-            reader = csv.DictReader(f)
-            fieldnames = reader.fieldnames
-            for row in reader:
-                try:
-                    ts = datetime.fromisoformat(row["timestamp"])
-                    if ts >= cutoff:
-                        kept.append(row)
-                    else:
-                        rows_purged += 1
-                except (ValueError, KeyError):
-                    kept.append(row)
         with _lock:
+            if not csv_path.exists():
+                continue
+            kept = []
+            with open(csv_path, newline="") as f:
+                reader = csv.DictReader(f)
+                fieldnames = reader.fieldnames
+                for row in reader:
+                    try:
+                        ts = datetime.fromisoformat(row["timestamp"])
+                        if ts >= cutoff:
+                            kept.append(row)
+                        else:
+                            rows_purged += 1
+                    except (ValueError, KeyError):
+                        kept.append(row)
+            if fieldnames is None:
+                # Empty/header-less file - nothing to rewrite.
+                continue
             with open(csv_path, "w", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
