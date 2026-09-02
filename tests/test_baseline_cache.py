@@ -24,11 +24,14 @@ import baseline
 
 @pytest.fixture(autouse=True)
 def reset_baseline_cache():
-    """baseline.py keeps module-level cache state; reset it around every
-    test so tests can't see each other's cached values."""
+    """baseline.py keeps module-level cache/accumulator state; reset it
+    around every test so tests can't see each other's cached values or
+    rolling windows."""
     baseline._cache.clear()
+    baseline._windows.clear()
     yield
     baseline._cache.clear()
+    baseline._windows.clear()
 
 
 def _stable_rows(n=100, latency=20.0):
@@ -60,22 +63,32 @@ def test_repeated_get_baseline_within_ttl_does_not_reread_the_csv(monkeypatch):
 
 
 def test_get_baseline_recomputes_after_ttl_expires(monkeypatch):
-    calls = {"count": 0}
+    """After the TTL expires, get_baseline must reflect newly-recorded data
+    (via the O(1) rolling accumulator, issue #13) rather than keep serving
+    the stale cached value forever."""
     current_time = {"t": 1000.0}
 
-    def counting_load_results(device_id, hours=1):
-        calls["count"] += 1
-        return _stable_rows()
-
-    monkeypatch.setattr(baseline, "load_results", counting_load_results)
+    monkeypatch.setattr(baseline, "load_results", lambda device_id, hours=1: _stable_rows(latency=20.0))
     monkeypatch.setattr(baseline.time, "monotonic", lambda: current_time["t"])
 
-    baseline.get_baseline(42)
-    assert calls["count"] == 1
+    first = baseline.get_baseline(42)
+    assert first["mean"] == pytest.approx(20.0)
+
+    # Feed very different values into the accumulator, as collector.py would
+    # via record_latency() on every probe.
+    for _ in range(50):
+        baseline.record_latency(42, 100.0)
+
+    # Still within the TTL: the cached value must be reused, unaffected by
+    # the new data that just came in.
+    still_cached = baseline.get_baseline(42)
+    assert still_cached == first
 
     current_time["t"] += baseline.CACHE_TTL_SEC + 1
-    baseline.get_baseline(42)
-    assert calls["count"] == 2, "baseline should recompute once the TTL has expired"
+    recomputed = baseline.get_baseline(42)
+    assert recomputed["mean"] > first["mean"], (
+        "baseline should recompute (and reflect newly recorded data) once the TTL has expired"
+    )
 
 
 def test_get_baseline_and_is_anomaly_values_are_unaffected_by_caching(monkeypatch):

@@ -196,6 +196,12 @@ def _probe_and_record(device_id: int, device: dict, last_latency: float | None) 
 
     save_result(device_id, latency, success, jitter)
 
+    # Keep the baseline's O(1) rolling accumulator current (issue #13). Must
+    # happen right after save_result so it mirrors the on-disk state the
+    # accumulator would otherwise have been (re)seeded from.
+    import baseline as bl
+    bl.record_latency(device_id, latency)
+
     # Update streak counter
     if not success:
         _streak[device_id] = _streak.get(device_id, 0) + 1
@@ -221,7 +227,6 @@ def _probe_and_record(device_id: int, device: dict, last_latency: float | None) 
 
     # Anomaly detection
     if success and latency is not None:
-        import baseline as bl
         if bl.is_anomaly(device_id, latency):
             from alerts import fire_anomaly_alert
             fire_anomaly_alert(device, latency, bl.get_baseline(device_id))
