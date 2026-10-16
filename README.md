@@ -192,15 +192,50 @@ All configuration is done from the **Settings** tab in the UI. Nothing requires 
 | Slack | Paste an Incoming Webhook URL — [create one here](https://api.slack.com/messaging/webhooks) |
 | Discord | Paste a Discord Webhook URL |
 | Teams | Paste a Teams Incoming Webhook URL |
+| Gotify | Server base URL, application token, and priority (default 5) |
 | Email | SMTP host, port, username, password, from/to addresses |
 
-Use the **Test** buttons to verify before saving.
+Use the **Test** buttons to verify delivery. The Slack and Gotify test buttons
+save their current settings before sending.
 
 `GET /api/settings` never returns secret values (SMTP password, webhook
-URLs) in cleartext — it returns a masked placeholder plus a `<field>_set`
-boolean so the UI can show "configured" without exposing the value.
+URLs, Gotify application token) in cleartext — it returns a masked placeholder
+plus a `<field>_set` boolean so the UI can show "configured" without exposing the value.
 Re-saving the settings form without changing a secret field preserves the
 value already on disk; sending an empty value clears it.
+
+### Gotify alerts
+
+1. Log in to your existing Gotify server. Open **Apps** and create an
+   application named **PingPlotter**. Copy its **application token** (not a
+   client token). See the [Gotify instructions](https://gotify.net/docs/pushmsg).
+2. In PingPlotter, open **Settings → Gotify Alerts**. Enter the server base
+   URL, such as `https://push.example.com` or `https://example.com/gotify`,
+   and the application token. HTTP and HTTPS are supported; a trailing slash
+   is accepted. Do not append `/message`. Use the final server URL directly;
+   redirects are not followed, so the token is never forwarded to another server.
+3. Choose an integer priority from **0 to 10** (default **5**) and click
+   **Save**. Gotify is enabled as soon as both URL and token are configured.
+4. Click **Send Test Message** to verify delivery. This button saves the
+   current Gotify fields before sending, just like the Slack test button.
+
+The token input stays blank after saving and shows a configured badge. Leave
+it blank to preserve the stored token, type a new token to replace it, or
+click **Clear Token**, then **Save**, to remove it and disable Gotify.
+Existing installations start with Gotify disabled; no migration is needed.
+
+Gotify receives device outages, latency and jitter warnings/critical alerts,
+route changes, and anomaly alerts as plain text. Maintenance windows and the
+existing per-device/per-alert cooldown apply. Digests, reports, and correlated
+network-event summaries are not sent to Gotify. Delivery failures are isolated
+from other channels and alert logging.
+
+The settings API accepts `gotify_url`, `gotify_token`, and `gotify_priority`.
+`POST /api/settings/test-gotify` sends a test using the saved settings and
+returns `{"ok": true}` on success, HTTP 400 for incomplete/invalid settings,
+or HTTP 502 if delivery fails. The existing `PINGPLOTTER_TOKEN` authentication
+also protects this endpoint. Messages use `POST /message` with a JSON body
+and the application token in `X-Gotify-Key`, with a five-second timeout.
 
 ### Speedtest
 Set the interval in minutes (0 = disabled). Results appear in the Speedtest tab.

@@ -28,6 +28,7 @@ SECRET_SETTINGS_FIELDS = [
     "discord_webhook_url",
     "teams_webhook_url",
     "webhook_url",
+    "gotify_token",
 ]
 SECRET_PLACEHOLDER = "********"
 
@@ -269,6 +270,17 @@ def update_settings(payload: dict):
             del cleaned[field]
         # Never let a client write the "_set" flag as if it were real data.
         cleaned.pop(f"{field}_set", None)
+    gotify_fields = ("gotify_url", "gotify_token", "gotify_priority")
+    if any(field in cleaned for field in gotify_fields):
+        from alerts import _validate_gotify_settings
+        candidate = {**storage.load_settings(), **cleaned}
+        try:
+            normalized = _validate_gotify_settings(candidate)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from None
+        for field, value in zip(gotify_fields, normalized):
+            if field in cleaned:
+                cleaned[field] = value
     updated = storage.save_settings(cleaned)
     return _redact_settings(updated)
 
@@ -318,6 +330,20 @@ def test_teams():
             return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/api/settings/test-gotify")
+def test_gotify():
+    from alerts import _send_gotify
+    try:
+        sent = _send_gotify("PingPlotter Test", "PingPlotter test — Gotify alerts are working!")
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from None
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from None
+    if not sent:
+        raise HTTPException(status_code=400, detail="Configure both the Gotify server URL and application token")
+    return {"ok": True}
 
 
 @app.post("/api/settings/test-email")

@@ -492,6 +492,30 @@
         </div>
       </div>
       <div class="s-card">
+        <div class="s-card-head"><h2>Gotify Alerts</h2><p>Send device alerts to your Gotify server. Reports and digests are not sent.</p></div>
+        <div class="s-card-body">
+          <div class="s-field">
+            <label for="s-gotify-url">Server Base URL</label>
+            <input type="url" id="s-gotify-url" class="form-input" placeholder="https://push.example.com" autocomplete="off" />
+            <div class="hint">Include any reverse-proxy path, for example https://example.com/gotify. Do not append /message.</div>
+          </div>
+          <div class="s-field">
+            <label for="s-gotify-token">Application Token <span id="s-gotify-token-badge" class="secret-badge" onclick="clearSecretField('s-gotify-token')"></span></label>
+            <input type="password" id="s-gotify-token" class="form-input" placeholder="Application token from Gotify → Apps" autocomplete="off" />
+            <div class="hint">Alerts are enabled when both URL and token are saved. Leave a configured token blank to keep it.</div>
+          </div>
+          <div class="s-field">
+            <label for="s-gotify-priority">Priority (0–10)</label>
+            <input type="number" id="s-gotify-priority" class="form-input" value="5" min="0" max="10" step="1" />
+          </div>
+        </div>
+        <div class="s-card-foot">
+          <button class="btn-save" onclick="saveSection('gotify')">Save</button>
+          <button class="btn-outline" id="test-gotify" onclick="testGotify()">Send Test Message</button>
+          <button class="btn-outline" onclick="clearSecretField('s-gotify-token')">Clear Token</button>
+        </div>
+      </div>
+      <div class="s-card">
         <div class="s-card-head"><h2>Email Alerts (SMTP)</h2><p>Send alert notifications via email.</p></div>
         <div class="s-card-body">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -1994,6 +2018,7 @@ const SECRET_FIELD_INPUT = {
   teams_webhook_url: "s-teams-webhook",
   webhook_url: "s-custom-webhook",
   smtp_pass: "s-smtp-pass",
+  gotify_token: "s-gotify-token",
 };
 const _origPlaceholder = {};
 
@@ -2072,6 +2097,8 @@ async function loadSettings() {
   document.getElementById("s-cooldown").value = s.cooldown_sec ?? 300;
   document.getElementById("s-interval").value = s.default_interval_sec ?? 5;
   document.getElementById("s-retention").value = s.retention_days ?? 30;
+  document.getElementById("s-gotify-url").value = s.gotify_url || "";
+  document.getElementById("s-gotify-priority").value = s.gotify_priority ?? 5;
   document.getElementById("s-smtp-host").value = s.smtp_host || "";
   document.getElementById("s-smtp-port").value = s.smtp_port || 587;
   document.getElementById("s-smtp-user").value = s.smtp_user || "";
@@ -2092,6 +2119,7 @@ async function saveSection(section) {
     webhook:   { webhook_url: collectSecretValue("s-custom-webhook") },
     discord:   { discord_webhook_url: collectSecretValue("s-discord-webhook") },
     teams:     { teams_webhook_url: collectSecretValue("s-teams-webhook") },
+    gotify:    collectGotifySettings(),
     email:     {
       smtp_host: document.getElementById("s-smtp-host").value,
       smtp_port: parseInt(document.getElementById("s-smtp-port").value) || 587,
@@ -2114,6 +2142,27 @@ async function testSlack() {
     const r = await api("/settings/test-slack", "POST");
     toast(r.ok ? "Test message sent to Slack!" : "Slack test failed.", r.ok ? "success" : "error");
   } catch(e) { toast("Test failed: " + e.message, "error"); }
+}
+
+function collectGotifySettings() {
+  const priority = document.getElementById("s-gotify-priority").value;
+  return {
+    gotify_url: document.getElementById("s-gotify-url").value.trim(),
+    gotify_token: collectSecretValue("s-gotify-token"),
+    gotify_priority: priority === "" ? null : Number(priority),
+  };
+}
+
+async function testGotify() {
+  const btn = document.getElementById("test-gotify");
+  btn.disabled = true;
+  try {
+    const updated = await api("/settings", "POST", collectGotifySettings());
+    syncSecretBadges(updated);
+    await api("/settings/test-gotify", "POST");
+    toast("Gotify test sent!");
+  } catch(e) { toast("Gotify test failed: " + e.message, "error"); }
+  finally { btn.disabled = false; }
 }
 
 async function testDiscord() {

@@ -1,5 +1,5 @@
 """
-alerts.py - Threshold monitoring and Slack/webhook notifications
+alerts.py - Threshold monitoring and alert notifications
 """
 import os
 import time
@@ -98,6 +98,64 @@ def _send_teams(message: str):
         print(f"[ALERT] Teams send failed: {e}")
 
 
+def _validate_gotify_settings(settings: dict) -> tuple[str, str, int]:
+    """Validate optional Gotify settings without exposing submitted values."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    url = settings.get("gotify_url", "")
+    token = settings.get("gotify_token", "")
+    priority = settings.get("gotify_priority", 5)
+    if not isinstance(url, str) or not isinstance(token, str):
+        raise ValueError("Gotify URL and application token must be text")
+    url, token = url.strip(), token.strip()
+    if type(priority) is not int or not 0 <= priority <= 10:
+        raise ValueError("Gotify priority must be an integer between 0 and 10")
+    if any(character.isspace() for character in token) or not token.isascii():
+        raise ValueError("Gotify application token must contain only non-whitespace ASCII characters")
+    if url:
+        try:
+            parts = urlsplit(url)
+            if (parts.scheme not in ("http", "https") or not parts.hostname
+                    or parts.username is not None or parts.password is not None
+                    or parts.query or parts.fragment or any(c.isspace() for c in url)):
+                raise ValueError
+            # Accessing .port also validates malformed/out-of-range ports.
+            _ = parts.port
+            url = urlunsplit((parts.scheme, parts.netloc, parts.path.rstrip("/"), "", ""))
+        except ValueError:
+            raise ValueError("Gotify URL must be an HTTP(S) base URL without credentials, query, or fragment") from None
+    return url, token, priority
+
+
+def _send_gotify(title: str, message: str) -> bool:
+    """Send via Gotify; return False when disabled, raise sanitized errors."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    url, token, priority = _validate_gotify_settings(load_settings())
+    if not url or not token:
+        return False
+
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            # Do not forward the application token to a redirect target.
+            return None
+
+    body = json.dumps({"title": title, "message": message, "priority": priority}, ensure_ascii=False).encode()
+    request = urllib.request.Request(url + "/message", data=body,
+                                     headers={"Content-Type": "application/json", "X-Gotify-Key": token})
+    try:
+        opener = urllib.request.build_opener(NoRedirect())
+        with opener.open(request, timeout=5):
+            return True
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(f"Gotify returned HTTP {error.code}") from None
+    except Exception:
+        # Exception text or an upstream error body could include the token.
+        raise RuntimeError("Could not deliver Gotify message; check the server URL and connectivity") from None
+
+
 def _send_email(subject: str, body: str):
     """Send alert email via SMTP."""
     s = load_settings()
@@ -151,7 +209,7 @@ def _send_webhook(device: dict, alert_type: str, value: float, threshold: float)
 
 
 def _fire_alert(device: dict, alert_type: str, slack_msg: str, value: float = 0, threshold: float = 0):
-    """Send Slack message, log the alert, and post to custom webhook."""
+    """Send device alerts through configured channels and record them."""
     _send_slack(slack_msg)
     _send_discord(slack_msg)
     _send_teams(slack_msg)
@@ -161,6 +219,13 @@ def _fire_alert(device: dict, alert_type: str, slack_msg: str, value: float = 0,
     log_alert(device["id"], device["name"], alert_type, value, threshold)
     _send_webhook(device, alert_type, value, threshold)
     _check_correlation(device["id"], device["name"], alert_type)
+    try:
+        # Gotify defaults to plain text; remove Slack's formatting and emoji codes.
+        gotify_message = clean.replace("*", "").replace("`", "")
+        title = alert_type.replace("_", " ").capitalize()
+        _send_gotify(f"PingPlotter: {title} — {device['name']}", gotify_message)
+    except Exception:
+        print("[ALERT] Gotify send failed; check the configured server URL, token, and connectivity")
 
 
 def check_and_alert(
@@ -227,6 +292,9 @@ def check_and_alert(
 
 def fire_anomaly_alert(device: dict, latency: float, baseline: dict):
     """Fire anomaly alert (statistically unusual latency vs. 7-day baseline)."""
+    from storage import is_in_maintenance
+    if is_in_maintenance(device["id"]):
+        return
     if not _can_alert(device["id"], "anomaly"):
         return
     mean = baseline["mean"]
