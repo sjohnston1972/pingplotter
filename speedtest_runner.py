@@ -16,7 +16,7 @@ def run_once() -> dict | None:
     try:
         # speedtest-cli installs as "speedtest-cli", not "speedtest"
         result = subprocess.run(
-            ["speedtest-cli", "--json"],
+            ["speedtest-cli", "--secure", "--json"],
             capture_output=True, text=True, timeout=120
         )
         data = json.loads(result.stdout)
@@ -47,7 +47,9 @@ def run_once_streaming(emit) -> dict | None:
     """
     try:
         import speedtest as _st
-        s = _st.Speedtest()
+        # The legacy HTTP metadata endpoint can return an unrelated regional
+        # server list. Retrieve configuration and server candidates over HTTPS.
+        s = _st.Speedtest(secure=True)
         emit("init", {})
 
         s.get_best_server()
